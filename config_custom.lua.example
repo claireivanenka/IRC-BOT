@@ -1,0 +1,74 @@
+-- =====================================================================
+-- Exemple de fichier de configuration personnalisée
+-- Copiez ce fichier en config_custom.lua et modifiez-le
+-- =====================================================================
+
+-- Ce fichier est chargé APRES config.lua et peut écraser les valeurs par défaut
+
+return {
+    -- Configuration du serveur IRC
+    server = {
+        host = "irc.libera.chat",  -- Ou "irc.freenode.net", "irc.oftc.net", etc.
+        port = 6697,               -- 6667 pour non-SSL, 6697 pour SSL
+        use_ssl = true,            -- true pour SSL
+    },
+    
+    -- Configuration du bot
+    bot = {
+        nick = "MonSuperBot",      -- Nom unique pour le bot
+        user = "monsuperbot",      -- Identifiant utilisateur
+        realname = "Mon Bot Personnel en Lua",
+    },
+    
+    -- Channel(s) à rejoindre
+    channels = {
+        "#mon-channel",
+        "#test-bot",
+    },
+    
+    -- Personnalisation du menu
+    menu = {
+        boissons = {
+            {"Café", 2.50},
+            {"Thé vert", 2.75},
+            {"Thé noir", 2.50},
+            {"Jus d'orange frais", 3.50},
+            {"Jus de pomme", 3.25},
+            {"Coca-Cola", 3.00},
+            {"Eau plate", 1.50},
+            {"Eau gazeuse", 1.75},
+            {"Bière blonde", 5.00},
+            {"Bière brune", 5.50},
+            {"Vin rouge", 7.00},
+            {"Vin blanc", 6.50},
+        },
+        nourriture = {
+            {"Croissant", 2.50},
+            {"Pain au chocolat", 3.00},
+            {"Brioche", 3.50},
+            {"Sandwich jambon-beurre", 6.00},
+            {"Sandwich poulet", 7.50},
+            {"Salade niçoise", 9.50},
+            {"Salade César", 8.50},
+            {"Pizza Margherita", 10.00},
+            {"Pizza Reine", 12.00},
+            {"Pizza 4 fromages", 12.50},
+            {"Burger classique", 9.00},
+            {"Burger bacon-cheese", 11.00},
+            {"Frites", 3.50},
+            {"Nuggets (6 pièces)", 5.00},
+            {"Tarte aux pommes", 4.50},
+            {"Tarte au citron", 4.50},
+            {"Glace vanille", 3.50},
+            {"Glace chocolat", 3.50},
+        }
+    },
+    
+    -- Tâches planifiées
+    scheduled_tasks = {
+        hourly_date = true,      -- true pour activer /exec -o date chaque heure
+    },
+    
+    -- Préfixe des commandes
+    command_prefix = "!",       -- Peut être changé en ".", "&", etc.
+}

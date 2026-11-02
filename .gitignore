@@ -1,0 +1,23 @@
+# Logs
+*.log
+*.tmp
+
+# Fichiers de configuration locale
+config_custom.lua
+
+# Fichiers de dépendances
+lua_modules/
+
+# Fichiers de build
+*.o
+*.so
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
