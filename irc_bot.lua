@@ -1066,37 +1066,44 @@ end
 
 -- Nettoyer une URL YouTube en supprimant les trackers
 function clean_youtube_url(url, requested_by)
-    -- Vérifier que c'est bien une URL YouTube
-    if not url:match("youtube%.com") and not url:match("youtu%.be/") then
-        return "⚠️  Ce n'est pas une URL YouTube valide.", nil
-    end
-
-    -- Remplacer youtu.be/ par youtube.com/watch?v=
-    url = url:gsub("youtu%.be/([%w_-]+)", "youtube.com/watch?v=%1")
+    local cleaned_url = url
+    local domain
     
-    -- Extraire l'ID vidéo depuis différentes formes d'URL
-    local video_id = url:match("v=([%w_-]+)") 
-                    or url:match("youtube%.com/embed/([%w_-]+)") 
-                    or url:match("youtube%.com/watch/([%w_-]+)")
-                    or url:match("youtube%.com/v/([%w_-]+)")
-                    or url:match("youtube%.com/shorts/([%w_-]+)")
-                    or url:match("youtu%.be/([%w_-]+)")
-    
-    local cleaned_url
-    if video_id then
-        -- Reconstruire l'URL propre
-        cleaned_url = "https://www.youtube.com/watch?v=" .. video_id
-    elseif url:match("youtube%.com") then
-        -- Si on n'a pas trouvé d'ID mais que c'est une URL youtube.com
-        -- Retourner l'URL nettoyée (sans paramètres)
-        local clean = url:match("^(https?://[^/]+/[^%?#]+)") or url
-        cleaned_url = clean:gsub("?.*", ""):gsub("#.*", "")
+    -- Vérifier si c'est une URL YouTube
+    if url:match("youtube%.com") or url:match("youtu%.be/") then
+        -- Remplacer youtu.be/ par youtube.com/watch?v=
+        cleaned_url = url:gsub("youtu%.be/([%w_-]+)", "youtube.com/watch?v=%1")
+        
+        -- Extraire l'ID vidéo depuis différentes formes d'URL
+        local video_id = cleaned_url:match("v=([%w_-]+)") 
+                        or cleaned_url:match("youtube%.com/embed/([%w_-]+)") 
+                        or cleaned_url:match("youtube%.com/watch/([%w_-]+)")
+                        or cleaned_url:match("youtube%.com/v/([%w_-]+)")
+                        or cleaned_url:match("youtube%.com/shorts/([%w_-]+)")
+                        or cleaned_url:match("youtu%.be/([%w_-]+)")
+        
+        if video_id then
+            -- Reconstruire l'URL propre YouTube
+            cleaned_url = "https://www.youtube.com/watch?v=" .. video_id
+        elseif cleaned_url:match("youtube%.com") then
+            -- Si on n'a pas trouvé d'ID mais que c'est une URL youtube.com
+            -- Retourner l'URL nettoyée (sans paramètres)
+            local clean = cleaned_url:match("^(https?://[^/]+/[^%?#]+)") or cleaned_url
+            cleaned_url = clean:gsub("?.*", ""):gsub("#.*", "")
+        end
     else
-        cleaned_url = url
+        -- Pour n'importe quelle autre URL, supprimer les paramètres
+        if url:match("^https?://") then
+            local clean = url:match("^(https?://[^%?#]+)") or url
+            cleaned_url = clean:gsub("?.*", ""):gsub("#.*", "")
+        else
+            -- Si ce n'est pas une URL valide, ajouter https://
+            cleaned_url = "https://" .. url
+        end
     end
     
     -- Extraire le domaine pour la requête DNS
-    local domain = extract_domain(cleaned_url)
+    domain = extract_domain(cleaned_url)
     if domain and requested_by then
         -- Sauvegarder la requête DNS en arrière-plan (ne pas bloquer)
         local success, err = pcall(function()
@@ -1329,20 +1336,16 @@ function handle_message(msg)
             local ip = get_ip_address(domain)
             log_message("DBG", "!clean handler", "cleaned=" .. tostring(cleaned) .. ", domain=" .. tostring(domain) .. ", ip=" .. tostring(ip))
             
-            -- Vérifier si le nettoyage a réussi
-            if cleaned and not cleaned:match("⚠️") then
-                send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
-                
-                -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
-                log_message("DBG", "!clean handler", "config.database.enabled=" .. tostring(config.database and config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
-                if config.database and config.database.enabled and db_conn then
-                    log_message("DBG", "!clean handler", "Calling save_cleaned_url")
-                    save_cleaned_url(url, cleaned, nick, ip, domain)
-                else
-                    log_message("DBG", "!clean handler", "Skipping save_cleaned_url (db not enabled or not connected)")
-                end
+            -- Toujours envoyer la réponse avec l'URL nettoyée et l'IP
+            send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
+            
+            -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
+            log_message("DBG", "!clean handler", "config.database.enabled=" .. tostring(config.database and config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
+            if config.database and config.database.enabled and db_conn then
+                log_message("DBG", "!clean handler", "Calling save_cleaned_url")
+                save_cleaned_url(url, cleaned, nick, ip, domain)
             else
-                send_irc_message(target, nick .. ": " .. (cleaned or "⚠️ URL invalide"))
+                log_message("DBG", "!clean handler", "Skipping save_cleaned_url (db not enabled or not connected)")
             end
         end
     end
@@ -1381,7 +1384,7 @@ function handle_message(msg)
     
     -- Commande : aide
     if message:match("!help") or message:match("!aide") then
-        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | " ..
+        local help_text = "Commandes disponibles: !clean <url> - nettoyer n'importe quelle URL | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
                          "!listmenus [date|-date|name|-name|creator|-creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)
@@ -1568,8 +1571,8 @@ function main()
     print("SSL:       " .. (config.use_ssl and "✓ Activé" or "✗ Désactivé"))
     print(string.rep("=", 60))
     print("\nCommandes disponibles:")
-    print("  !clean <url>    - Nettoyer une URL YouTube")
-    print("  !urls [N]       - Lister les URLs nettoyées")
+    print("  !clean <url>    - Nettoyer n'importe quelle URL (affiche l'IP)")
+    print("  !urls [N]       - Lister les URLs nettoyées avec IP")
     print("  !lasturls [N]   - Lister les N dernières URLs nettoyées (défaut: 5)")
     print("  !listurls [N]   - Afficher le contenu brut de la base PostgreSQL")
     print("  !menu [boire|manger] - Afficher le menu")
