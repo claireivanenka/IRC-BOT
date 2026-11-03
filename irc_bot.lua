@@ -1156,35 +1156,46 @@ function clean_youtube_url(url, requested_by)
         -- Nettoyer les paramètres de tracking connus
         -- Supprimer les paramètres UTM, gclid, fbclid, refer_*, etc.
         local query_string = cleaned_url:match("?(.+)") or ""
-        local clean_query = ""
         
         if query_string ~= "" then
-            -- Séparer les paramètres
+            -- Liste des préfixes de paramètres de tracking à supprimer
+            local tracking_params = {
+                "utm_", "gclid", "fbclid", "refer_", "srch_", "sprefix", 
+                "_x_", "session", "track", "click", "ad_", "campaign", 
+                "source", "medium", "term", "content", "adgroup"
+            }
+            
+            -- Séparer les paramètres et garder seulement ceux qui ne sont pas du tracking
             local params = {}
             for param in query_string:gmatch("([^&]+)") do
                 local key = param:match("^([^=]+)") or param
-                -- Garder seulement les paramètres importants (pas de tracking)
-                if key and not key:match("^utm_") and 
-                   not key:match("^gclid") and 
-                   not key:match("^fbclid") and
-                   not key:match("^refer_") and
-                   not key:match("^srch_") and
-                   not key:match("^sprefix") and
-                   not key:match("^_x_") and
-                   not key:match("^session") and
-                   not key:match("^track") then
+                local is_tracking = false
+                
+                if key then
+                    -- Vérifier si le paramètre commence par un des préfixes de tracking
+                    for _, prefix in ipairs(tracking_params) do
+                        if key:lower():find("^" .. prefix:lower(), 1, true) == 1 then
+                            is_tracking = true
+                            break
+                        end
+                    end
+                end
+                
+                -- Garder le paramètre s'il n'est pas du tracking
+                if not is_tracking then
                     table.insert(params, param)
                 end
             end
             
             -- Reconstruire la query string si des paramètres importants restent
             if #params > 0 then
-                clean_query = "?" .. table.concat(params, "&")
+                cleaned_url = base_url .. "?" .. table.concat(params, "&")
+            else
+                cleaned_url = base_url
             end
+        else
+            cleaned_url = base_url
         end
-        
-        -- Construire l'URL finale nettoyée
-        cleaned_url = base_url .. clean_query
         
         -- Supprimer les fragments (#)
         cleaned_url = cleaned_url:gsub("#.*", "")
