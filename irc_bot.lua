@@ -908,13 +908,19 @@ function handle_message(msg)
     if message:match("!help") or message:match("!aide") then
         local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
-                         "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !ping - tester le bot | !help - aide"
+                         "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)
     end
     
     -- Commande : ping (vérifier que le bot est vivant)
     if message:lower():match("^!ping$") then
         send_irc_message(target, nick .. ": 🏓 Pong ! Le bot est bien vivant ! ⏱️")
+    end
+    
+    -- Commande : date (exécute /exec -o date manuellement)
+    if message:lower():match("^!date$") then
+        send_irc_message(config.channel, "/exec -o date")
+        log_message("CMD", nick, "a exécuté /exec -o date")
     end
     
     -- =====================================================================
@@ -1059,7 +1065,7 @@ function main()
     else
         welcome_msg = welcome_msg .. " (⚠️ NickServ: non configuré)"
     end
-    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !ping, !help")
+    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help")
     
     -- Afficher les infos dans la console
     print("\n" .. string.rep("=", 60))
@@ -1079,6 +1085,7 @@ function main()
     print("  !listmenus [date|name|creator] - Lister les menus personnalisés (par date, nom ou créateur)")
     print("  !showmenu <nom>  - Afficher un menu personnalisé")
     print("  !delmenu <nom>   - Supprimer un menu personnalisé")
+    print("  !date            - Afficher la date et l'heure")
     print("  !ping            - Tester si le bot répond")
     print("  !help            - Affiche cette aide")
     print("\nPour configurer NickServ (nécessaire sur Libera.Chat):")
