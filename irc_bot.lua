@@ -267,7 +267,7 @@ end
 function create_menus_table()
     if not db_conn then return end
     
-    local cursor = db_conn:execute([[
+    local result = db_conn:execute([[
         CREATE TABLE IF NOT EXISTS ]] .. config.database.menus_table .. [[ (
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL UNIQUE,
@@ -277,10 +277,12 @@ function create_menus_table()
         )
     ]])
     
-    if cursor then
-        cursor:close()
-        print("✓ Table " .. config.database.menus_table .. " prête")
+    -- result peut être un curseur (pour SELECT) ou un nombre (pour CREATE/INSERT)
+    -- Si c'est un curseur, le fermer
+    if result and type(result) == "userdata" then
+        result:close()
     end
+    print("✓ Table " .. config.database.menus_table .. " prête")
 end
 
 -- Fermer la connexion PostgreSQL
@@ -451,10 +453,16 @@ function save_custom_menu_to_pg(menu)
         " WHERE name = '" .. escape_sql(menu.name) .. "'"
     )
     
-    if cursor and cursor:fetch() then
-        -- Update
+    local exists = false
+    if cursor then
+        exists = cursor:fetch() ~= nil
         cursor:close()
-        cursor = db_conn:execute(
+    end
+    
+    local result
+    if exists then
+        -- Update
+        result = db_conn:execute(
             "UPDATE " .. config.database.menus_table .. " SET " ..
             "content = '" .. escape_sql(menu.content) .. "', " ..
             "created_by = '" .. escape_sql(menu.created_by) .. "' " ..
@@ -462,8 +470,7 @@ function save_custom_menu_to_pg(menu)
         )
     else
         -- Insert
-        if cursor then cursor:close() end
-        cursor = db_conn:execute(
+        result = db_conn:execute(
             "INSERT INTO " .. config.database.menus_table .. " " ..
             "(name, content, created_at, created_by) VALUES (" ..
             "'" .. escape_sql(menu.name) .. "', " ..
@@ -472,11 +479,11 @@ function save_custom_menu_to_pg(menu)
         )
     end
     
-    if cursor then
-        cursor:close()
-        return true
+    -- result peut être un curseur (pour SELECT) ou un nombre (pour UPDATE/INSERT)
+    if result and type(result) == "userdata" then
+        result:close()
     end
-    return false
+    return true
 end
 
 -- Charger les menus depuis PostgreSQL
@@ -513,14 +520,16 @@ function delete_custom_menu_from_pg(name)
         return (str or ""):gsub("'", "''")
     end
     
-    local cursor = db_conn:execute(
+    local result = db_conn:execute(
         "DELETE FROM " .. config.database.menus_table .. 
         " WHERE name = '" .. escape_sql(name) .. "'"
     )
     
-    if cursor then
-        local affected = cursor:numrows() or 0
-        cursor:close()
+    -- result peut être un curseur (pour SELECT) ou un nombre (pour DELETE)
+    -- Si c'est un curseur, le fermer
+    if result and type(result) == "userdata" then
+        local affected = result:numrows() or 0
+        result:close()
         return affected > 0
     end
     return false
