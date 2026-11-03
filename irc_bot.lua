@@ -801,6 +801,23 @@ function load_cleaned_urls()
         local row_count = 0
         while row do
             row_count = row_count + 1
+            -- Si les colonnes GeoIP existent, les utiliser, sinon obtenir les infos à la volée
+            local country = row.country or ""
+            local country_code = row.country_code or ""
+            local city = row.city or ""
+            local isp = row.isp or ""
+            
+            -- Si GeoIP n'est pas dans la base, essayer de l'obtenir depuis l'IP
+            if (country == "" or city == "") and row.ip_address and row.ip_address ~= "" and row.ip_address ~= "N/A" then
+                local geoip = get_geoip_info(row.ip_address)
+                if geoip then
+                    country = geoip.country or ""
+                    country_code = geoip.countryCode or ""
+                    city = geoip.city or ""
+                    isp = geoip.isp or ""
+                end
+            end
+            
             table.insert(urls, {
                 original_url = row.original_url,
                 cleaned_url = row.cleaned_url,
@@ -808,10 +825,10 @@ function load_cleaned_urls()
                 cleaned_by = row.cleaned_by,
                 ip_address = row.ip_address or "N/A",
                 domain = row.domain or "N/A",
-                country = row.country or "",
-                country_code = row.country_code or "",
-                city = row.city or "",
-                isp = row.isp or ""
+                country = country,
+                country_code = country_code,
+                city = city,
+                isp = isp
             })
             log_message("DBG", "load_cleaned_urls", "Row " .. row_count .. ": " .. tostring(row.original_url))
             row = cursor:fetch(row, "a")
