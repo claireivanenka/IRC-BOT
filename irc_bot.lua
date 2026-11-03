@@ -57,16 +57,37 @@ local config = {
     -- Configuration pour sauvegarder les menus dans PostgreSQL
     -- Pour activer : change enabled = true et configure les paramètres
     database = {
-        enabled = false,           -- Activer PostgreSQL (true) ou utiliser fichier local (false)
+        enabled = true,            -- Activer PostgreSQL (true) ou utiliser fichier local (false)
         driver = "postgres",      -- Driver de la base de données
         host = "localhost",       -- Adresse du serveur PostgreSQL
         port = 5432,              -- Port PostgreSQL
         database = "irc_bot",     -- Nom de la base de données
-        user = "irc_bot",         -- Nom d'utilisateur PostgreSQL
-        password = "",            -- Mot de passe PostgreSQL
+        user = "irc_user",        -- Nom d'utilisateur PostgreSQL
+        password = "irc_password", -- Mot de passe PostgreSQL
         menus_table = "custom_menus" -- Nom de la table pour les menus
     }
 }
+
+-- Charger la configuration personnalisée si elle existe
+local custom_config_file = io.open("config_custom.lua", "r")
+if custom_config_file then
+    custom_config_file:close()
+    local custom_config = dofile("config_custom.lua")
+    if custom_config and type(custom_config) == "table" then
+        -- Fusionner les configurations
+        for k, v in pairs(custom_config) do
+            if type(v) == "table" and config[k] and type(config[k]) == "table" then
+                -- Fusion profonde pour les tables
+                for k2, v2 in pairs(v) do
+                    config[k][k2] = v2
+                end
+            else
+                config[k] = v
+            end
+        end
+        print("✓ Configuration personnalisée chargée depuis config_custom.lua")
+    end
+end
 
 -- =====================================================================
 -- EXEMPLES DE CONFIGURATION POUR AUTRES SERVEURS
