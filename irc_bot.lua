@@ -1172,9 +1172,10 @@ function clean_youtube_url(url, requested_by)
                 local is_tracking = false
                 
                 if key then
+                    local key_lower = key:lower()
                     -- Vérifier si le paramètre commence par un des préfixes de tracking
                     for _, prefix in ipairs(tracking_params) do
-                        if key:lower():find("^" .. prefix:lower(), 1, true) == 1 then
+                        if key_lower:find(prefix:lower(), 1, true) == 1 then
                             is_tracking = true
                             break
                         end
