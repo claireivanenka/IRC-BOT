@@ -314,6 +314,118 @@ end
 
 ---
 
+## 🗄️ Configuration PostgreSQL
+
+### Activer la sauvegarde des menus en base de données
+
+Le bot peut sauvegarder les menus personnalisés dans une base de données PostgreSQL au lieu d'un fichier local.
+
+#### Configuration minimale
+
+```lua
+return {
+    -- ... autres configurations ...
+    
+    database = {
+        enabled = true,          -- Activer PostgreSQL
+        host = "localhost",      -- Adresse du serveur
+        port = 5432,             -- Port PostgreSQL
+        database = "irc_bot",    -- Nom de la base
+        user = "irc_user",       -- Utilisateur
+        password = "motdepasse",-- Mot de passe
+        menus_table = "custom_menus", -- Table pour les menus
+    }
+}
+```
+
+#### Configuration avancée
+
+| Option | Type | Description | Valeur par défaut |
+|--------|------|-------------|-------------------|
+| `enabled` | boolean | Activer/désactiver PostgreSQL | `false` |
+| `host` | string | Adresse du serveur PostgreSQL | `localhost` |
+| `port` | number | Port de connexion | `5432` |
+| `database` | string | Nom de la base de données | `irc_bot` |
+| `user` | string | Nom d'utilisateur | `irc_user` |
+| `password` | string | Mot de passe | `irc_password` |
+| `menus_table` | string | Nom de la table pour les menus | `custom_menus` |
+
+### Installation de PostgreSQL
+
+#### Sur Debian/Ubuntu
+
+```bash
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+```
+
+#### Configuration PostgreSQL
+
+1. Crée un utilisateur PostgreSQL :
+   ```bash
+   sudo -u postgres createuser -P irc_user
+   ```
+
+2. Crée la base de données :
+   ```bash
+   sudo -u postgres createdb -O irc_user irc_bot
+   ```
+
+3. Connecte-toi à la base et crée la table :
+   ```sql
+   CREATE TABLE custom_menus (
+       id SERIAL PRIMARY KEY,
+       name VARCHAR(100) NOT NULL UNIQUE,
+       content TEXT NOT NULL,
+       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+       created_by VARCHAR(100) NOT NULL
+   );
+   ```
+
+### Utilisation avec Docker
+
+```yaml
+version: '3'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: irc_bot
+      POSTGRES_USER: irc_user
+      POSTGRES_PASSWORD: irc_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:
+```
+
+### Installation de luasql.postgres
+
+Le bot utilise la bibliothèque `luasql.postgres` pour se connecter à PostgreSQL.
+
+```bash
+sudo apt install lua-sql-postgres
+```
+
+Ou avec LuaRocks :
+```bash
+luarocks install luasql-postgres
+```
+
+### Dépannage
+
+- **Erreur de connexion** : Vérifie que PostgreSQL est en cours d'exécution et que les identifiants sont corrects.
+- **Table manquante** : Le bot essaye de créer la table automatiquement au premier démarrage.
+- **Permissions** : Assure-toi que l'utilisateur a les droits sur la base de données.
+
+### Fallback automatique
+
+Si PostgreSQL n'est pas disponible (connexion échouée), le bot basculera automatiquement sur le système de sauvegarde par fichier local sans interrupion.
+
+---
+
 ## 📤 Exemple de configuration complète
 
 ```lua

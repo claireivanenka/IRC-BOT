@@ -51,6 +51,49 @@ Nous utilisons le [Semantic Versioning](https://semver.org/) :
 
 ---
 
+## 🚀 [1.1.0] - 2024-11-03
+
+### ✨ Menus personnalisés et sauvegarde PostgreSQL
+
+#### Ajouté
+- **Menus personnalisés** : Les utilisateurs peuvent créer des menus personnalisés avec `!addmenu <nom> <texte>`
+- **Gestion complète des menus** : `!listmenus`, `!showmenu <nom>`, `!delmenu <nom>`
+- **Horodatage automatique** : Chaque menu personnalisé est daté lors de sa création
+- **Sauvegarde PostgreSQL** : Option de sauvegarde des menus dans une base PostgreSQL
+- **Fallback automatique** : Si PostgreSQL n'est pas disponible, le bot utilise la sauvegarde par fichier
+- **Documentation PostgreSQL** : Guide complet pour configurer et utiliser PostgreSQL
+
+#### Commandes ajoutées
+| Commande | Description |
+|----------|-------------|
+| `!addmenu <nom> <texte>` | Crée un nouveau menu personnalisé avec horodatage |
+| `!listmenus` | Liste tous les menus personnalisés créés |
+| `!showmenu <nom>` | Affiche un menu personnalisé spécifique |
+| `!delmenu <nom>` | Supprime un menu personnalisé |
+
+#### Configuration PostgreSQL
+Nouvelle section dans `config.lua` :
+```lua
+database = {
+    enabled = true,          -- Activer PostgreSQL
+    host = "localhost",      -- Hôte PostgreSQL
+    port = 5432,             -- Port PostgreSQL
+    database = "irc_bot",    -- Nom de la base
+    user = "irc_user",       -- Utilisateur
+    password = "password",   -- Mot de passe
+    menus_table = "custom_menus", -- Table pour les menus
+}
+```
+
+#### Dépendances supplémentaires
+- luasql-postgres (optionnel, pour PostgreSQL)
+- PostgreSQL (optionnel, serveur de base de données)
+
+#### Schéma de la base de données
+Voir [docs/database_schema.sql](docs/database_schema.sql)
+
+---
+
 ## 🔄 [Non sorti]
 
 ### À venir (Roadmap)

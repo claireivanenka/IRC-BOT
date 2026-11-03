@@ -52,6 +52,20 @@ local config = {
     
     -- === TÂCHES PLANIFIÉES ===
     hourly_date = true,              -- Exécuter /exec -o date chaque heure ronde
+    
+    -- === BASE DE DONNÉES (PostgreSQL) ===
+    -- Configuration pour sauvegarder les menus dans PostgreSQL
+    -- Pour activer : change enabled = true et configure les paramètres
+    database = {
+        enabled = false,           -- Activer PostgreSQL (true) ou utiliser fichier local (false)
+        driver = "postgres",      -- Driver de la base de données
+        host = "localhost",       -- Adresse du serveur PostgreSQL
+        port = 5432,              -- Port PostgreSQL
+        database = "irc_bot",     -- Nom de la base de données
+        user = "irc_bot",         -- Nom d'utilisateur PostgreSQL
+        password = "",            -- Mot de passe PostgreSQL
+        menus_table = "custom_menus" -- Nom de la table pour les menus
+    }
 }
 
 -- =====================================================================
@@ -174,6 +188,95 @@ function file_exists(name)
     return false
 end
 
+-- =====================================================================
+-- BASE DE DONNÉES POSTGRESQL
+-- =====================================================================
+
+-- Variables globales pour la connexion PostgreSQL
+local luasql = nil
+local db_env = nil
+local db_conn = nil
+
+-- Initialiser la connexion PostgreSQL
+function init_database()
+    if not config.database or not config.database.enabled then
+        return false
+    end
+    
+    -- Charger le module luasql
+    local ok, err = pcall(function() luasql = require("luasql.postgres") end)
+    if not ok then
+        print("⚠️ Impossible de charger luasql.postgres: " .. err)
+        print("   Installez-le avec: sudo apt install lua-luasql-postgres")
+        return false
+    end
+    
+    -- Créer l'environnement
+    db_env = luasql.postgres()
+    if not db_env then
+        print("⚠️ Impossible de créer l'environnement PostgreSQL")
+        return false
+    end
+    
+    -- Se connecter à la base de données
+    local conn_str = string.format("host=%s port=%d dbname=%s user=%s password=%s",
+        config.database.host,
+        config.database.port,
+        config.database.database,
+        config.database.user,
+        config.database.password)
+    
+    db_conn = db_env:connect(conn_str)
+    if not db_conn then
+        print("⚠️ Impossible de se connecter à PostgreSQL")
+        print("   Vérifiez: host, port, database, user, password")
+        return false
+    end
+    
+    print("✓ Connecté à PostgreSQL")
+    log_message("SYS", "Database", "Connecté à PostgreSQL")
+    
+    -- Créer la table si elle n'existe pas
+    create_menus_table()
+    
+    return true
+end
+
+-- Créer la table des menus si elle n'existe pas
+function create_menus_table()
+    if not db_conn then return end
+    
+    local cursor = db_conn:execute([[
+        CREATE TABLE IF NOT EXISTS ]] .. config.database.menus_table .. [[ (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            created_by VARCHAR(255) NOT NULL
+        )
+    ]])
+    
+    if cursor then
+        cursor:close()
+        print("✓ Table " .. config.database.menus_table .. " prête")
+    end
+end
+
+-- Fermer la connexion PostgreSQL
+function close_database()
+    if db_conn then
+        db_conn:close()
+        db_conn = nil
+    end
+    if db_env then
+        db_env:close()
+        db_env = nil
+    end
+    if luasql then
+        luasql = nil
+    end
+end
+
 -- Écrire dans le log
 function log_message(type, source, message)
     if not config.logging.enabled or not log_file then return end
@@ -228,8 +331,30 @@ local custom_menus = {}
 -- Fichier de sauvegarde des menus
 local custom_menus_file = "custom_menus.dat"
 
--- Charger les menus personnalisés depuis le fichier
+-- Charger les menus personnalisés (choisit entre PostgreSQL et fichier)
 function load_custom_menus()
+    if config.database and config.database.enabled and db_conn then
+        load_custom_menus_from_pg()
+    else
+        load_custom_menus_from_file()
+    end
+end
+
+-- Sauvegarder les menus (postgreSQL ou fichier selon config)
+function save_custom_menus()
+    if config.database and config.database.enabled and db_conn then
+        for _, menu in ipairs(custom_menus) do
+            save_custom_menu_to_pg(menu)
+        end
+        print("✓ " .. #custom_menus .. " menu(s) sauvegardé(s) en PostgreSQL")
+        log_message("SYS", "Menus", #custom_menus .. " menu(s) sauvegardé(s) en PostgreSQL")
+    else
+        save_custom_menus_to_file()
+    end
+end
+
+-- Charger les menus depuis le fichier local (fallback)
+function load_custom_menus_from_file()
     local file = io.open(custom_menus_file, "r")
     if not file then return end
     
@@ -237,24 +362,31 @@ function load_custom_menus()
     file:close()
     
     if content and content ~= "" then
-        -- Utiliser loadstring avec un environnement sécurisé
         local chunk = loadstring("return " .. content)
         if chunk then
             local ok, loaded_menus = pcall(chunk)
             if ok and type(loaded_menus) == "table" then
                 custom_menus = loaded_menus
-                print("✓ " .. #custom_menus .. " menu(s) personnalisé(s) chargé(s) depuis " .. custom_menus_file)
-                log_message("SYS", "Menus", #custom_menus .. " menu(s) chargé(s)")
+                print("✓ " .. #custom_menus .. " menu(s) chargé(s) depuis " .. custom_menus_file)
+                log_message("SYS", "Menus", #custom_menus .. " menu(s) chargé(s) depuis fichier")
             end
         end
     end
 end
 
--- Sauvegarder les menus personnalisés dans un fichier
-function save_custom_menus()
+-- Formater un timestamp en date lisible
+function format_timestamp(ts)
+    return os.date("%Y-%m-%d %H:%M:%S", ts or os.time())
+end
+
+-- =====================================================================
+-- FONCTIONS DE SAUVEGARDE DES MENUS (Fichier local)
+-- =====================================================================
+
+-- Sauvegarder les menus dans un fichier local
+function save_custom_menus_to_file()
     local file = io.open(custom_menus_file, "w")
     if file then
-        -- Utiliser une sérialisation avec noms de champs pour éviter les problèmes
         local serialization = "{"
         for i, menu in ipairs(custom_menus) do
             if i > 1 then serialization = serialization .. "," end
@@ -266,17 +398,110 @@ function save_custom_menus()
         serialization = serialization .. "\n}"
         file:write(serialization)
         file:close()
-        print("✓ " .. #custom_menus .. " menu(s) personnalisé(s) sauvegardé(s) dans " .. custom_menus_file)
-        log_message("SYS", "Menus", #custom_menus .. " menu(s) sauvegardé(s)")
+        print("✓ " .. #custom_menus .. " menu(s) sauvegardé(s) dans " .. custom_menus_file)
+        log_message("SYS", "Menus", #custom_menus .. " menu(s) sauvegardé(s) dans fichier")
     else
-        print("⚠️ Impossible de sauvegarder les menus: " .. custom_menus_file)
+        print("⚠️ Impossible de sauvegarder les menus dans " .. custom_menus_file)
     end
 end
 
--- Formater un timestamp en date lisible
-function format_timestamp(ts)
-    return os.date("%Y-%m-%d %H:%M:%S", ts or os.time())
+-- =====================================================================
+-- FONCTIONS DE SAUVEGARDE DES MENUS (PostgreSQL)
+-- =====================================================================
+
+-- Sauvegarder un menu dans PostgreSQL
+function save_custom_menu_to_pg(menu)
+    if not db_conn then return false end
+    
+    -- Échappement des apostrophes pour SQL
+    local function escape_sql(str)
+        return (str or ""):gsub("'", "''")
+    end
+    
+    -- Vérifier si le menu existe déjà
+    local cursor = db_conn:execute(
+        "SELECT 1 FROM " .. config.database.menus_table .. 
+        " WHERE name = '" .. escape_sql(menu.name) .. "'"
+    )
+    
+    if cursor and cursor:fetch() then
+        -- Update
+        cursor:close()
+        cursor = db_conn:execute(
+            "UPDATE " .. config.database.menus_table .. " SET " ..
+            "content = '" .. escape_sql(menu.content) .. "', " ..
+            "created_by = '" .. escape_sql(menu.created_by) .. "' " ..
+            "WHERE name = '" .. escape_sql(menu.name) .. "'"
+        )
+    else
+        -- Insert
+        if cursor then cursor:close() end
+        cursor = db_conn:execute(
+            "INSERT INTO " .. config.database.menus_table .. " " ..
+            "(name, content, created_at, created_by) VALUES (" ..
+            "'" .. escape_sql(menu.name) .. "', " ..
+            "'" .. escape_sql(menu.content) .. "', " ..
+            "NOW(), '" .. escape_sql(menu.created_by) .. "')"
+        )
+    end
+    
+    if cursor then
+        cursor:close()
+        return true
+    end
+    return false
 end
+
+-- Charger les menus depuis PostgreSQL
+function load_custom_menus_from_pg()
+    if not db_conn then return end
+    
+    local cursor = db_conn:execute(
+        "SELECT name, content, EXTRACT(EPOCH FROM created_at) as created_at, created_by " ..
+        "FROM " .. config.database.menus_table .. " ORDER BY created_at DESC"
+    )
+    
+    if cursor then
+        local row = cursor:fetch({}, "a")
+        while row do
+            table.insert(custom_menus, {
+                name = row.name,
+                content = row.content,
+                created_at = tonumber(row.created_at) or os.time(),
+                created_by = row.created_by
+            })
+            row = cursor:fetch(row, "a")
+        end
+        cursor:close()
+        print("✓ " .. #custom_menus .. " menu(s) chargé(s) depuis PostgreSQL")
+        log_message("SYS", "Menus", #custom_menus .. " menu(s) chargé(s) depuis PostgreSQL")
+    end
+end
+
+-- Supprimer un menu de PostgreSQL
+function delete_custom_menu_from_pg(name)
+    if not db_conn then return false end
+    
+    local function escape_sql(str)
+        return (str or ""):gsub("'", "''")
+    end
+    
+    local cursor = db_conn:execute(
+        "DELETE FROM " .. config.database.menus_table .. 
+        " WHERE name = '" .. escape_sql(name) .. "'"
+    )
+    
+    if cursor then
+        local affected = cursor:numrows() or 0
+        cursor:close()
+        return affected > 0
+    end
+    return false
+end
+
+-- =====================================================================
+-- FONCTIONS PUBLIQUES POUR LES MENUS
+-- =====================================================================
 
 -- Ajouter un menu personnalisé
 function add_custom_menu(name, content, creator)
@@ -295,7 +520,14 @@ function add_custom_menu(name, content, creator)
     }
     
     table.insert(custom_menus, new_menu)
-    save_custom_menus()  -- Sauvegarder après ajout
+    
+    -- Sauvegarder selon la configuration
+    if config.database and config.database.enabled and db_conn then
+        save_custom_menu_to_pg(new_menu)
+    else
+        save_custom_menus_to_file()
+    end
+    
     return new_menu, "Menu ajouté avec succès"
 end
 
@@ -304,7 +536,14 @@ function delete_custom_menu(name)
     for i, menu in ipairs(custom_menus) do
         if menu.name:lower() == name:lower() then
             table.remove(custom_menus, i)
-            save_custom_menus()  -- Sauvegarder après suppression
+            
+            -- Sauvegarder selon la configuration
+            if config.database and config.database.enabled and db_conn then
+                delete_custom_menu_from_pg(name)
+            else
+                save_custom_menus_to_file()
+            end
+            
             return true, "Menu supprimé"
         end
     end
@@ -689,6 +928,13 @@ function main()
     init_logging()
     log_message("SYS", "Bot", "Démarrage du bot IRC")
     
+    -- Initialiser la base de données (PostgreSQL) si configurée
+    if config.database and config.database.enabled then
+        if not init_database() then
+            print("⚠️  PostgreSQL non disponible, utilise le fichier local")
+        end
+    end
+    
     -- Charger les menus personnalisés sauvegardés
     load_custom_menus()
     
@@ -812,6 +1058,9 @@ end
 function handle_error(err)
     print("Erreur: " .. err)
     log_message("ERR", "System", err)
+    if config.database and config.database.enabled then
+        close_database()
+    end
     save_custom_menus()  -- Sauvegarder les menus avant de quitter
     disconnect()
     close_logging()
@@ -822,6 +1071,9 @@ end
 function handle_signal()
     print("\nReçu signal d'arrêt...")
     log_message("SYS", "System", "Arrêt demandé par l'utilisateur (Ctrl+C)")
+    if config.database and config.database.enabled then
+        close_database()
+    end
     disconnect()
     close_logging()
     os.exit(0)

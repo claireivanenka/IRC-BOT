@@ -63,6 +63,8 @@ lua irc_bot.lua
 |----------------|----------|-------------|
 | 🧹 Nettoyage YouTube | `!clean <url>` | Supprime les trackers des URLs YouTube |
 | 🍽️ Menu interactif | `!menu [boire\|manger]` | Affiche un menu de boissons et nourriture |
+| 📋 Menus personnalisés | `!addmenu`, `!delmenu`, `!listmenus` | Crée et gère des menus personnalisés avec horodatage |
+| 🗄️ Sauvegarde PostgreSQL | Automatique | Sauvegarde des menus dans une base PostgreSQL |
 | ⏰ Date horaire | Automatique | Exécute `/exec -o date` chaque heure ronde |
 | 📚 Documentation | `!help` | Affiche l'aide |
 

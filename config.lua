@@ -56,4 +56,15 @@ return {
     
     -- Préfixe des commandes (par défaut: !)
     command_prefix = "!",
+    
+    -- Configuration de la base de données PostgreSQL
+    database = {
+        enabled = false,         -- Activer la sauvegarde en base de données
+        host = "localhost",      -- Hôte PostgreSQL
+        port = 5432,             -- Port PostgreSQL
+        database = "irc_bot",    -- Nom de la base de données
+        user = "irc_user",       -- Utilisateur PostgreSQL
+        password = "irc_password", -- Mot de passe PostgreSQL
+        menus_table = "custom_menus", -- Nom de la table pour les menus
+    },
 }
