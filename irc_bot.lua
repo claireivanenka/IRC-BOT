@@ -296,67 +296,49 @@ end
 function create_cleaned_urls_table()
     if not db_conn then return end
     
-    -- Vérifier si la table existe
-    local check_result = db_conn:execute("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'cleaned_urls')")
-    local table_exists = false
-    if check_result then
-        local row = check_result:fetch({}, "a")
-        if row and row.exists == true then
-            table_exists = true
-        end
-        check_result:close()
+    -- Créer la table directement avec IF NOT EXISTS
+    local result = db_conn:execute([[
+        CREATE TABLE IF NOT EXISTS cleaned_urls (
+            id SERIAL PRIMARY KEY,
+            original_url TEXT NOT NULL,
+            cleaned_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            cleaned_by VARCHAR(255) NOT NULL,
+            ip_address VARCHAR(45),
+            domain VARCHAR(255),
+            UNIQUE(original_url)
+        )
+    ]])
+    if result and type(result) == "userdata" then
+        result:close()
     end
+    print("✓ Table cleaned_urls prête")
     
-    if not table_exists then
-        -- Créer la table
-        local result = db_conn:execute([[
-            CREATE TABLE cleaned_urls (
-                id SERIAL PRIMARY KEY,
-                original_url TEXT NOT NULL,
-                cleaned_url TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT NOW(),
-                cleaned_by VARCHAR(255) NOT NULL,
-                ip_address VARCHAR(45),
-                domain VARCHAR(255),
-                UNIQUE(original_url)
-            )
-        ]])
-        if result and type(result) == "userdata" then
-            result:close()
-        end
-        print("✓ Table cleaned_urls créée")
-    else
-        -- Vérifier si les colonnes existent et les ajouter si nécessaire
-        local columns = {"original_url", "cleaned_url", "created_at", "cleaned_by", "ip_address", "domain"}
-        for _, col in ipairs(columns) do
-            local col_check = db_conn:execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'cleaned_urls' AND column_name = '" .. col .. "')")
-            if col_check then
-                local col_row = col_check:fetch({}, "a")
-                if col_row and col_row.exists == false then
-                    -- Ajouter la colonne manquante
-                    local alter_result
-                    if col == "original_url" then
-                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN original_url TEXT NOT NULL DEFAULT ''")
-                    elseif col == "cleaned_url" then
-                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN cleaned_url TEXT NOT NULL DEFAULT ''")
-                    elseif col == "created_at" then
-                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN created_at TIMESTAMP DEFAULT NOW()")
-                    elseif col == "cleaned_by" then
-                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN cleaned_by VARCHAR(255) NOT NULL DEFAULT 'unknown'")
-                    elseif col == "ip_address" then
-                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN ip_address VARCHAR(45)")
-                    elseif col == "domain" then
-                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN domain VARCHAR(255)")
-                    end
-                    if alter_result and type(alter_result) == "userdata" then
-                        alter_result:close()
-                    end
-                    print("✓ Colonne " .. col .. " ajoutée à cleaned_urls")
+    -- Ajouter les colonnes si elles n'existent pas (pour les mises à jour)
+    local columns_to_add = {
+        {name = "original_url", type = "TEXT NOT NULL DEFAULT ''"},
+        {name = "cleaned_url", type = "TEXT NOT NULL DEFAULT ''"},
+        {name = "created_at", type = "TIMESTAMP DEFAULT NOW()"},
+        {name = "cleaned_by", type = "VARCHAR(255) NOT NULL DEFAULT 'unknown'"},
+        {name = "ip_address", type = "VARCHAR(45)"},
+        {name = "domain", type = "VARCHAR(255)"}
+    }
+    
+    for _, col in ipairs(columns_to_add) do
+        local col_check = db_conn:execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'cleaned_urls' AND column_name = '" .. col.name .. "'")
+        if col_check then
+            local col_row = col_check:fetch({}, "a")
+            if not col_row then
+                -- Ajouter la colonne manquante
+                local alter_query = "ALTER TABLE cleaned_urls ADD COLUMN " .. col.name .. " " .. col.type
+                local alter_result = db_conn:execute(alter_query)
+                if alter_result and type(alter_result) == "userdata" then
+                    alter_result:close()
                 end
-                col_check:close()
+                print("✓ Colonne " .. col.name .. " ajoutée à cleaned_urls")
             end
+            col_check:close()
         end
-        print("✓ Table cleaned_urls existe déjà")
     end
 end
 
@@ -775,32 +757,23 @@ function load_cleaned_urls()
         return {}
     end
     
-    -- Vérifier si la table existe
-    local check_table = db_conn:execute("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'cleaned_urls')")
-    local table_exists = false
-    if check_table then
-        local row = check_table:fetch({}, "a")
-        if row and row.exists then
-            table_exists = true
-        end
-        check_table:close()
-    end
-    log_message("DBG", "load_cleaned_urls", "Table cleaned_urls exists=" .. tostring(table_exists))
-    
-    if not table_exists then
-        log_message("DBG", "load_cleaned_urls", "Table cleaned_urls does not exist, creating...")
-        create_cleaned_urls_table()
-    end
-    
     local urls = {}
     local query = "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address, domain FROM cleaned_urls ORDER BY created_at DESC"
     log_message("DBG", "load_cleaned_urls", "Executing query: " .. query)
     
-    local success, cursor = pcall(function() return db_conn:execute(query) end)
+    local cursor, err = db_conn:execute(query)
     
-    if not success then
-        log_message("ERR", "load_cleaned_urls", "Query failed: " .. tostring(cursor))
-        return {}
+    if not cursor then
+        log_message("ERR", "load_cleaned_urls", "Query failed: " .. tostring(err))
+        -- Essayer de créer la table si elle n'existe pas
+        log_message("DBG", "load_cleaned_urls", "Attempting to create cleaned_urls table")
+        create_cleaned_urls_table()
+        -- Réessayer la requête
+        cursor, err = db_conn:execute(query)
+        if not cursor then
+            log_message("ERR", "load_cleaned_urls", "Second query attempt failed: " .. tostring(err))
+            return {}
+        end
     end
     
     if cursor then
