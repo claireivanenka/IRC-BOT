@@ -1144,14 +1144,50 @@ function clean_youtube_url(url, requested_by)
             cleaned_url = clean:gsub("?.*", ""):gsub("#.*", "")
         end
     else
-        -- Pour n'importe quelle autre URL, supprimer les paramètres
-        if url:match("^https?://") then
-            local clean = url:match("^(https?://[^%?#]+)") or url
-            cleaned_url = clean:gsub("?.*", ""):gsub("#.*", "")
-        else
-            -- Si ce n'est pas une URL valide, ajouter https://
+        -- Pour n'importe quelle autre URL
+        if not url:match("^https?://") then
+            -- Ajouter https:// si ce n'est pas une URL complète
             cleaned_url = "https://" .. url
         end
+        
+        -- Extraire la base de l'URL (sans paramètres ni fragments)
+        local base_url = cleaned_url:match("^(https?://[^%?#]+)") or cleaned_url
+        
+        -- Nettoyer les paramètres de tracking connus
+        -- Supprimer les paramètres UTM, gclid, fbclid, refer_*, etc.
+        local query_string = cleaned_url:match("?(.+)") or ""
+        local clean_query = ""
+        
+        if query_string ~= "" then
+            -- Séparer les paramètres
+            local params = {}
+            for param in query_string:gmatch("([^&]+)") do
+                local key = param:match("^([^=]+)") or param
+                -- Garder seulement les paramètres importants (pas de tracking)
+                if key and not key:match("^utm_") and 
+                   not key:match("^gclid") and 
+                   not key:match("^fbclid") and
+                   not key:match("^refer_") and
+                   not key:match("^srch_") and
+                   not key:match("^sprefix") and
+                   not key:match("^_x_") and
+                   not key:match("^session") and
+                   not key:match("^track") then
+                    table.insert(params, param)
+                end
+            end
+            
+            -- Reconstruire la query string si des paramètres importants restent
+            if #params > 0 then
+                clean_query = "?" .. table.concat(params, "&")
+            end
+        end
+        
+        -- Construire l'URL finale nettoyée
+        cleaned_url = base_url .. clean_query
+        
+        -- Supprimer les fragments (#)
+        cleaned_url = cleaned_url:gsub("#.*", "")
     end
     
     -- Extraire le domaine pour la requête DNS
