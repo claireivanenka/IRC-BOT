@@ -366,7 +366,13 @@ function load_custom_menus_from_file()
         if chunk then
             local ok, loaded_menus = pcall(chunk)
             if ok and type(loaded_menus) == "table" then
-                custom_menus = loaded_menus
+                -- Filtrer les menus invalides (sans nom)
+                custom_menus = {}
+                for _, menu in ipairs(loaded_menus) do
+                    if menu.name and menu.name ~= "" then
+                        table.insert(custom_menus, menu)
+                    end
+                end
                 print("✓ " .. #custom_menus .. " menu(s) chargé(s) depuis " .. custom_menus_file)
                 log_message("SYS", "Menus", #custom_menus .. " menu(s) chargé(s) depuis fichier")
             end
@@ -552,15 +558,23 @@ end
 
 -- Lister tous les menus personnalisés
 function list_custom_menus()
-    if #custom_menus == 0 then
+    -- Filtrer les menus sans nom (pour éviter les entrées corrompues)
+    local valid_menus = {}
+    for _, menu in ipairs(custom_menus) do
+        if menu.name and menu.name ~= "" then
+            table.insert(valid_menus, menu)
+        end
+    end
+    
+    if #valid_menus == 0 then
         return "Aucun menu personnalisé n'a été créé."
     end
     
-    local count = #custom_menus
+    local count = #valid_menus
     local output = "📋 **Menus personnalisés** (" .. count .. ") :\n"
-    for i, menu in ipairs(custom_menus) do
+    for i, menu in ipairs(valid_menus) do
         output = output .. string.format("%d. **%s** *(par %s)* - %s\n", 
-            i, menu.name, menu.created_by, format_timestamp(menu.created_at))
+            i, menu.name, menu.created_by or "inconnu", format_timestamp(menu.created_at or os.time()))
     end
     output = output .. "\nUtilisez !showmenu <nom> pour afficher un menu, !delmenu <nom> pour le supprimer"
     return output
@@ -988,7 +1002,7 @@ function main()
     else
         welcome_msg = welcome_msg .. " (⚠️ NickServ: non configuré)"
     end
-    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !menu, !addmenu, !listmenus, !showmenu, !ping, !help")
+    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !ping, !help")
     
     -- Afficher les infos dans la console
     print("\n" .. string.rep("=", 60))
