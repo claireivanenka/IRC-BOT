@@ -892,17 +892,20 @@ function handle_message(msg)
         send_irc_message(target, nick .. ": ❌ Utilisation: !delmenu <nom>")
     end
     
-    -- Lister les menus : !listmenus ou !listmenu (alias)
-    if message:lower():match("^!listmenus$") or message:lower():match("^!listmenu$") then
+    -- Lister les menus : !listmenus ou !listmenu (sans argument)
+    if message:lower():match("^!listmenus$") then
+        send_irc_message(target, list_custom_menus())
+    elseif message:lower():match("^!listmenu$") then
+        -- !listmenu sans argument = alias de !listmenus
         send_irc_message(target, list_custom_menus())
     end
     
-    -- Afficher un menu : !showmenu NomDuMenu ou !listmenu NomDuMenu (alias)
+    -- Afficher un menu : !showmenu NomDuMenu ou !listmenu NomDuMenu
     local showmenu_match = message:lower():match("^!showmenu (%S+)") or message:lower():match("^!listmenu (%S+)")
     if showmenu_match then
         local result = show_custom_menu(showmenu_match)
         send_irc_message(target, result)
-    elseif message:lower():match("^!showmenu$") or message:lower():match("^!listmenu$") then
+    elseif message:lower():match("^!showmenu$") then
         send_irc_message(target, nick .. ": ❌ Utilisation: !showmenu <nom> ou !listmenu <nom>")
     end
 end
