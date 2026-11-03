@@ -679,6 +679,57 @@ function list_cleaned_urls_raw(limit)
     return output
 end
 
+-- Lister les requêtes DNS depuis PostgreSQL
+function list_dns_queries(limit)
+    if not db_conn then
+        return "❌ Base de données non disponible"
+    end
+    
+    limit = limit or 10
+    
+    local query = "SELECT id, domain, ip_address, hostname, resolved_at, query_time, status, requested_by " ..
+                   "FROM dns_queries ORDER BY resolved_at DESC" .. (limit and " LIMIT " .. limit or "")
+    
+    local cursor = db_conn:execute(query)
+    
+    if not cursor then
+        return "❌ Erreur lors de la requête DNS"
+    end
+    
+    local row = cursor:fetch({}, 'a')
+    if not row then
+        cursor:close()
+        return "Aucune requête DNS trouvée"
+    end
+    
+    local count_cursor = db_conn:execute("SELECT COUNT(*) as total FROM dns_queries")
+    local total = 0
+    if count_cursor then
+        local count_row = count_cursor:fetch({}, 'a')
+        if count_row then
+            total = tonumber(count_row.total) or 0
+        end
+        count_cursor:close()
+    end
+    
+    local output = "🔍 **Requêtes DNS** (" .. total .. " total, " .. limit .. " affichées): "
+    local i = 0
+    while row do
+        i = i + 1
+        local domain_short = shorten_url(row.domain, 30)
+        local ip = row.ip_address or 'N/A'
+        local status = row.status or 'UNKNOWN'
+        local requested_by = row.requested_by or 'unknown'
+        local query_time = row.query_time or 0
+        output = output .. string.format(" | %s->%s[%sms](%s)", domain_short, ip, query_time, status)
+        row = cursor:fetch(row, 'a')
+        if limit and i >= limit then break end
+    end
+    cursor:close()
+    
+    return output
+end
+
 -- Fonction utilitaire pour raccourcir les URLs
 function shorten_url(url, max_length)
     max_length = max_length or 50
@@ -717,6 +768,36 @@ function get_ip_address(domain)
     end)
     
     return ok and ip or "N/A"
+end
+
+-- Sauvegarder une requête DNS dans PostgreSQL
+function save_dns_query(domain, ip_address, requested_by)
+    if not db or not domain then return end
+    
+    local hostname = "N/A"
+    local start_time = os.time()
+    
+    -- Résolution DNS
+    local resolved_ip = ip_address or get_ip_address(domain)
+    local end_time = os.time()
+    local query_time = end_time - start_time
+    local status = resolved_ip ~= "N/A" and "SUCCESS" or "FAILED"
+    
+    local query = string.format(
+        "INSERT INTO dns_queries (domain, ip_address, hostname, resolved_at, query_time, status, requested_by) VALUES ($1, $2, $3, NOW(), %d, $4, $5)",
+        query_time
+    )
+    
+    local ok, err = pcall(function()
+        local res = assert(db:execute(query, domain, resolved_ip, hostname, status, requested_by))
+        return res
+    end)
+    
+    if not ok then
+        log_message("[DBG] Erreur sauvegarde DNS: " .. tostring(err))
+    else
+        log_message(string.format("[DBG] DNS sauvegardée: %s -> %s (par %s)", domain, resolved_ip, requested_by))
+    end
 end
 
 -- =====================================================================
@@ -846,10 +927,10 @@ end
 -- =====================================================================
 
 -- Nettoyer une URL YouTube en supprimant les trackers
-function clean_youtube_url(url)
+function clean_youtube_url(url, requested_by)
     -- Vérifier que c'est bien une URL YouTube
     if not url:match("youtube%.com") and not url:match("youtu%.be/") then
-        return "⚠️  Ce n'est pas une URL YouTube valide."
+        return "⚠️  Ce n'est pas une URL YouTube valide.", nil
     end
 
     -- Remplacer youtu.be/ par youtube.com/watch?v=
@@ -863,19 +944,30 @@ function clean_youtube_url(url)
                     or url:match("youtube%.com/shorts/([%w_-]+)")
                     or url:match("youtu%.be/([%w_-]+)")
     
+    local cleaned_url
     if video_id then
         -- Reconstruire l'URL propre
-        return "https://www.youtube.com/watch?v=" .. video_id
-    end
-    
-    -- Si on n'a pas trouvé d'ID mais que c'est une URL youtube.com
-    -- Retourner l'URL nettoyée (sans paramètres)
-    if url:match("youtube%.com") then
+        cleaned_url = "https://www.youtube.com/watch?v=" .. video_id
+    elseif url:match("youtube%.com") then
+        -- Si on n'a pas trouvé d'ID mais que c'est une URL youtube.com
+        -- Retourner l'URL nettoyée (sans paramètres)
         local clean = url:match("^(https?://[^/]+/[^%?#]+)") or url
-        return clean:gsub("?.*", ""):gsub("#.*", "")
+        cleaned_url = clean:gsub("?.*", ""):gsub("#.*", "")
+    else
+        cleaned_url = url
     end
     
-    return url
+    -- Extraire le domaine pour la requête DNS
+    local domain = extract_domain(cleaned_url)
+    if domain and requested_by then
+        -- Sauvegarder la requête DNS en arrière-plan (ne pas bloquer)
+        local co = coroutine.create(function()
+            save_dns_query(domain, nil, requested_by)
+        end)
+        coroutine.resume(co)
+    end
+    
+    return cleaned_url, domain
 end
 
 -- Afficher le menu
@@ -1090,8 +1182,7 @@ function handle_message(msg)
     if message:match("!clean %S+") then
         local url = message:match("!clean (%S+)")
         if url then
-            local cleaned = clean_youtube_url(url)
-            local domain = extract_domain(cleaned)
+            local cleaned, domain = clean_youtube_url(url, nick)
             local ip = get_ip_address(domain)
             send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
             
@@ -1116,6 +1207,15 @@ function handle_message(msg)
         send_irc_message(target, list_cleaned_urls_raw(limit))
     end
     
+    -- Commande : lister les requêtes DNS (!dns ou !dnsqueries)
+    local dns_match = message:lower():match("^!dns(%s*)")
+    local dnsqueries_match = message:lower():match("^!dnsqueries(%s*)")
+    if dns_match or dnsqueries_match then
+        local limit_str = dns_match or dnsqueries_match or ""
+        local limit = tonumber(limit_str:match("^%s+(%d+)")) or nil
+        send_irc_message(target, list_dns_queries(limit))
+    end
+    
     -- Commande : menu (menu par défaut)
     if message:match("!menu") then
         local category = message:match("!menu (%S+)") or "tout"
@@ -1124,7 +1224,7 @@ function handle_message(msg)
     
     -- Commande : aide
     if message:match("!help") or message:match("!aide") then
-        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !menu [boire|manger] - afficher le menu | " ..
+        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
                          "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)

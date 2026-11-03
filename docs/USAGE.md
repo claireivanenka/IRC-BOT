@@ -40,6 +40,7 @@ make test
 | `!clean <url>` | Nettoie une URL YouTube des trackers | `!clean https://youtu.be/xyz?feature=share` |
 | `!urls [N]` | Liste toutes les URLs nettoyées (N=limite) | `!urls 5` |
 | `!lasturls [N]` | Liste les N dernières URLs nettoyées (par défaut 5) | `!lasturls 10` |
+| `!dns [N]` ou `!dnsqueries [N]` | Liste les requêtes DNS effectuées | `!dns 5` |
 | `!menu` | Affiche le menu complet | `!menu` |
 | `!menu boire` | Affiche les boissons | `!menu boire` |
 | `!menu manger` | Affiche la nourriture | `!menu manger` |
@@ -111,6 +112,55 @@ Le bot peut stocker les URLs nettoyées dans PostgreSQL (si activé). Chaque ent
        2. https://youtu.be/ghi789 → https://youtu... [IP:142.250.186.46] *(par bob, 2026-11-03 20:17:00)
        ...
 ```
+
+---
+
+## 🔍 Requêtes DNS
+
+Le bot effectue automatiquement des **requêtes DNS** pour chaque URL nettoyée et stocke les résultats dans PostgreSQL.
+
+### Fonctionnement
+
+Pour chaque URL nettoyée via `!clean`, le bot :
+1. Extrait le domaine (ex: `www.youtube.com`)
+2. Effectue une résolution DNS pour obtenir l'adresse IP
+3. Mesure le temps de résolution
+4. Sauvegarde le tout dans la table `dns_queries`
+
+### Commandes
+
+| Commande | Description | Exemple |
+|----------|-------------|---------|
+| `!dns [N]` | Liste les N dernières requêtes DNS | `!dns 10` |
+| `!dnsqueries [N]` | Alias de `!dns` | `!dnsqueries 5` |
+
+### Exemple de sortie
+
+```irc
+<Toi> !dns
+<Bot> 🔍 Requêtes DNS (25 total, 10 affichées): | www.youtube.com->142.250.186.46[5ms](success) | youtu.be->142.250.186.46[3ms](success) | ...
+```
+
+**Explications :**
+- Format : `domaine->IP[temps_en_ms](statut)`
+- Le statut peut être : `success`, `failed`, `timeout`
+- Les requêtes sont triées par date (du plus récent au plus ancien)
+
+### Schéma de la table
+
+Voir [dns_queries_schema.sql](dns_queries_schema.sql) pour la structure complète de la table.
+
+### Informations stockées
+
+| Champ | Description | Exemple |
+|-------|-------------|---------|
+| `domain` | Domaine interrogé | `www.youtube.com` |
+| `ip_address` | Adresse IP résolue | `142.250.186.46` |
+| `hostname` | Nom d'hôte inverse (PTR) | `par21s01-in-f14.1e100.net` |
+| `resolved_at` | Date de résolution | `2026-11-03 20:15:00` |
+| `query_time` | Temps de résolution (ms) | `5` |
+| `status` | Statut de la requête | `success` |
+| `requested_by` | Nick IRC | `claire` |
 
 ---
 
