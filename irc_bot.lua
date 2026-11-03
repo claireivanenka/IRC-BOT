@@ -537,42 +537,31 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by)
         return (str or ""):gsub("'", "''")
     end
     
-    -- Vérifier si l'URL originale existe déjà
-    local check_success, check_exists = pcall(function()
-        local cursor = db_conn:execute(
-            "SELECT 1 FROM cleaned_urls WHERE original_url = '" .. escape_sql(original_url) .. "'"
-        )
-        if cursor then
-            local row = cursor:fetch({}, 'a')
-            cursor:close()
-            return row ~= nil
-        end
-        return false
-    end)
-    
-    if not check_success or check_exists then
-        return false
-    end
-    
     -- Extraire le domaine et obtenir l'IP
     local domain = extract_domain(cleaned_url)
     local ip = get_ip_address(domain)
     
-    -- Insérer la nouvelle URL nettoyée avec IP
-    local insert_success, insert_result = pcall(function()
-        local result = db_conn:execute(
+    -- Insérer ou mettre à jour l'URL nettoyée avec IP
+    -- Utilisation de INSERT ... ON CONFLICT pour PostgreSQL
+    local success, result = pcall(function()
+        local res = db_conn:execute(
             "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address) VALUES (" ..
             "'" .. escape_sql(original_url) .. "', " ..
             "'" .. escape_sql(cleaned_url) .. "', " ..
-            "NOW(), '" .. escape_sql(cleaned_by) .. "', '" .. escape_sql(ip) .. "')"
+            "NOW(), '" .. escape_sql(cleaned_by) .. "', '" .. escape_sql(ip) .. "') " ..
+            "ON CONFLICT (original_url) DO UPDATE SET " ..
+            "cleaned_url = EXCLUDED.cleaned_url, " ..
+            "created_at = NOW(), " ..
+            "cleaned_by = EXCLUDED.cleaned_by, " ..
+            "ip_address = EXCLUDED.ip_address"
         )
-        if result and type(result) == "userdata" then
-            result:close()
+        if res and type(res) == "userdata" then
+            res:close()
         end
         return true
     end)
     
-    return insert_success or false
+    return success or false
 end
 
 -- Charger les URLs nettoyées depuis PostgreSQL
@@ -772,7 +761,7 @@ end
 
 -- Sauvegarder une requête DNS dans PostgreSQL
 function save_dns_query(domain, ip_address, requested_by)
-    if not db or not domain then return end
+    if not db_conn or not domain then return end
     
     local hostname = "N/A"
     local start_time = os.time()
@@ -786,7 +775,7 @@ function save_dns_query(domain, ip_address, requested_by)
     local query = "INSERT INTO dns_queries (domain, ip_address, hostname, resolved_at, query_time, status, requested_by) VALUES ($1, $2, $3, NOW(), $4::interval, $5, $6)"
     
     local ok, err = pcall(function()
-        local res = assert(db:execute(query, domain, resolved_ip, hostname, query_time_ms .. " milliseconds", status, requested_by))
+        local res = assert(db_conn:execute(query, domain, resolved_ip, hostname, query_time_ms .. " milliseconds", status, requested_by))
         return res
     end)
     
@@ -958,10 +947,15 @@ function clean_youtube_url(url, requested_by)
     local domain = extract_domain(cleaned_url)
     if domain and requested_by then
         -- Sauvegarder la requête DNS en arrière-plan (ne pas bloquer)
-        local co = coroutine.create(function()
-            save_dns_query(domain, nil, requested_by)
+        local success, err = pcall(function()
+            local co = coroutine.create(function()
+                save_dns_query(domain, nil, requested_by)
+            end)
+            coroutine.resume(co)
         end)
-        coroutine.resume(co)
+        if not success then
+            log_message("[DBG] Erreur coroutine DNS: " .. tostring(err))
+        end
     end
     
     return cleaned_url, domain
