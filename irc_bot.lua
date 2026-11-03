@@ -3,28 +3,80 @@
 -- Utilise lua-socket (disponible via apt: lua-socket)
 -- =====================================================================
 
+-- =====================================================================
+-- CONFIGURATION COMPLÈTE RECOMMANDÉE POUR LIBERA.CHAT
+-- =====================================================================
+--
+-- 📌 POUR UTILISER CE BOT SUR LIBERA.CHAT :
+-- 1. Enregistre ton nick avec : /MSG NickServ REGISTER ton@email.com ton_mot_de_passe
+-- 2. Vérifie ton email et valide avec : /MSG NickServ VERIFY REGISTER ton_nick code_de_verification
+-- 3. Crée ton channel avec : /join #ton-channel
+-- 4. Configure config.nick, config.nickserv.password, et config.channel
+--
+-- =====================================================================
+
 -- Configuration
 local config = {
-    server = "irc.libera.chat",     -- Serveur IRC (ex: irc.libera.chat, irc.freenode.net)
+    -- === CONNEXION IRC ===
+    server = "irc.libera.chat",     -- Serveur IRC (irc.libera.chat, irc.oftc.net, etc.)
     port = 6667,                     -- Port (6697 pour SSL)
-    nick = "YouTubeCleanBot",        -- Nom du bot
-    user = "youtube_clean_bot",     -- Identifiant utilisateur
-    realname = "Bot de nettoyage YouTube et Menu",
-    channel = "#test",               -- Channel principal
-    -- Si vous voulez utiliser SSL (port 6697)
-    use_ssl = false,
-    -- Configuration du logging
+    use_ssl = false,                 -- true pour SSL (port 6697)
+    
+    -- === IDENTITÉ DU BOT ===
+    nick = "titoune",               -- Nom du bot (DOIT être enregistré sur Libera.Chat)
+    user = "titoune",               -- Identifiant utilisateur (généralement = nick)
+    realname = "Bot YouTube Cleaner et Menu",  -- Nom affiché
+    
+    -- === CANAUX ===
+    channel = "#fauve",             -- Channel principal à rejoindre (DOIT exister)
+    
+    -- === IDENTIFICATION NICKSERV (NÉCESSAIRE POUR LIBERA.CHAT) ===
+    -- ⚠️  SI TON NICK EST ENREGISTRÉ, ACTIVE CECI :
+    nickserv = {
+        enabled = false,            -- true pour activer l'identification automatique
+        password = "ton_mot_de_passe_nickserv",  -- Mot de passe NickServ
+        wait_time = 5,              -- Temps d'attente avant identification (secondes)
+    },
+    
+    -- === LOGGING (JOURNAUX) ===
     logging = {
         enabled = true,              -- Activer/désactiver le logging
         filename = "irc_bot.log",    -- Nom du fichier de log
-        max_size = 10 * 1024 * 1024,  -- Taille max en octets (10 Mo)
-        max_files = 5,                -- Nombre max de fichiers de backup
+        max_size = 10 * 1024 * 1024,  -- Taille max (10 Mo)
+        max_files = 5,               -- Nombre max de backups (irc_bot.log.1, .2, etc.)
         log_incoming = true,         -- Logger les messages entrants
         log_outgoing = true,         -- Logger les messages sortants
-        log_pings = false,            -- Logger les PING/PONG
-        log_errors = true,            -- Logger les erreurs
-    }
+        log_pings = false,           -- Logger les PING/PONG
+        log_errors = true,           -- Logger les erreurs
+    },
+    
+    -- === TÂCHES PLANIFIÉES ===
+    hourly_date = true,              -- Exécuter /exec -o date chaque heure ronde
 }
+
+-- =====================================================================
+-- EXEMPLES DE CONFIGURATION POUR AUTRES SERVEURS
+-- =====================================================================
+--
+-- Pour OFTC (pas besoin de NickServ) :
+-- config = {
+--     server = "irc.oftc.net",
+--     port = 6667,
+--     nick = "MonBot",
+--     channel = "#test",
+--     nickserv = {enabled = false},
+-- }
+--
+-- Pour Freenode (avec SSL) :
+-- config = {
+--     server = "irc.freenode.net",
+--     port = 6697,
+--     use_ssl = true,
+--     nick = "MonBot",
+--     nickserv = {enabled = true, password = "mot_de_passe"},
+-- }
+--
+-- =====================================================================
 
 -- =====================================================================
 -- Système de Logging
@@ -256,7 +308,8 @@ function connect_irc()
     
     local result, err = irc_socket:connect(config.server, config.port)
     if not result then
-        print("Erreur de connexion: " .. err)
+        print("❌ Erreur de connexion: " .. err)
+        log_message("ERR", "Connection", "Erreur: " .. err)
         return false
     end
     
@@ -269,8 +322,34 @@ function connect_irc()
     irc_socket:send("NICK " .. config.nick .. "\r\n")
     irc_socket:send("USER " .. config.user .. " 0 * :" .. config.realname .. "\r\n")
     
+    -- ========================================================================
+    -- IDENTIFICATION AUPRÈS DE NICKSERV (nécessaire pour Libera.Chat)
+    -- ========================================================================
+    -- Si ton nick est enregistré sur Libera.Chat, décommente et modifie :
+    --
+    -- config.nickserv = {
+    --     enabled = true,           -- Activer l'identification
+    --     password = "ton_mot_de_passe_nickserv",  -- Mot de passe NickServ
+    --     wait_time = 5,            -- Temps d'attente avant identification (secondes)
+    -- }
+    --
+    -- Pour enregistrer ton nick : /MSG NickServ REGISTER ton@email.com mot_de_passe
+    -- ========================================================================
+    
+    -- Identification automatique à NickServ si configuré
+    if config.nickserv and config.nickserv.enabled and config.nickserv.password then
+        socket.sleep(config.nickserv.wait_time or 2)
+        irc_socket:send("PRIVMSG NickServ :IDENTIFY " .. config.nickserv.password .. "\r\n")
+        print("✓ Identification NickServ envoyée")
+        log_message("SYS", "NickServ", "Identification envoyée pour " .. config.nick)
+    else
+        print("⚠️  NickServ non configuré. Si ton nick est enregistré, configure config.nickserv")
+        print("    Exemple : config.nickserv = {enabled = true, password = 'ton_mot_de_passe'}")
+    end
+    
     connected = true
-    print("Connecté au serveur IRC")
+    print("✓ Connecté au serveur IRC")
+    log_message("SYS", "Connection", "Connecté à " .. config.server .. ":" .. config.port)
     return true
 end
 
@@ -463,14 +542,37 @@ function main()
     
     -- Message de bienvenue
     socket.sleep(1)
-    send_irc_message(config.channel, "🤖 Bot démarré ! Commandes: !clean <url>, !menu, !help")
     
-    -- Boucle principale
-    print("Bot démarré. Appuyez sur Ctrl+C pour arrêter.")
-    print("Commandes disponibles:")
-    print("  !clean <url> - Nettoyer une URL YouTube")
+    -- Vérifier si NickServ est configuré
+    local welcome_msg = "🤖 Bot démarré !"
+    if config.nickserv and config.nickserv.enabled then
+        welcome_msg = welcome_msg .. " (NickServ: ✓ Identifié)"
+    else
+        welcome_msg = welcome_msg .. " (⚠️ NickServ: non configuré)"
+    end
+    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !menu, !help")
+    
+    -- Afficher les infos dans la console
+    print("\n" .. string.rep("=", 60))
+    print("  ✓ Bot démarré avec succès !")
+    print(string.rep("=", 60))
+    print("Serveur:   " .. config.server .. ":" .. config.port)
+    print("Nick:      " .. config.nick)
+    print("Channel:   " .. config.channel)
+    print("Logging:   " .. (config.logging.enabled and "✓ Activé (" .. config.logging.filename .. ")" or "✗ Désactivé"))
+    print("NickServ:  " .. (config.nickserv and config.nickserv.enabled and "✓ Configuré" or "✗ Non configuré"))
+    print("SSL:       " .. (config.use_ssl and "✓ Activé" or "✗ Désactivé"))
+    print(string.rep("=", 60))
+    print("\nCommandes disponibles:")
+    print("  !clean <url>    - Nettoyer une URL YouTube")
     print("  !menu [boire|manger] - Afficher le menu")
-    print("  !help - Aide")
+    print("  !help            - Affiche cette aide")
+    print("\nPour configurer NickServ (nécessaire sur Libera.Chat):")
+    print("  1. Enregistre ton nick: /MSG NickServ REGISTER ton@email.com ton_mot_de_passe")
+    print("  2. Valide avec le code reçu par email")
+    print("  3. Dans config.lua: nickserv = {enabled = true, password = 'ton_mot_de_passe'}")
+    print("  4. Redémarre le bot")
+    print(string.rep("=", 60) .. "\n")
     
     while connected do
         -- Lire les messages
