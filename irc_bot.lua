@@ -579,7 +579,11 @@ end
 
 -- Charger les URLs nettoyées depuis PostgreSQL
 function load_cleaned_urls()
-    if not db_conn then return {} end
+    log_message("[DBG] load_cleaned_urls: db_conn=" .. tostring(db_conn ~= nil))
+    if not db_conn then
+        log_message("[DBG] load_cleaned_urls: db_conn is nil, returning empty")
+        return {}
+    end
     
     local urls = {}
     local cursor = db_conn:execute(
@@ -600,7 +604,10 @@ function load_cleaned_urls()
             row = cursor:fetch(row, "a")
         end
         cursor:close()
+    else
+        log_message("[DBG] load_cleaned_urls: cursor is nil")
     end
+    log_message("[DBG] load_cleaned_urls: loaded " .. #urls .. " URLs")
     return urls
 end
 
