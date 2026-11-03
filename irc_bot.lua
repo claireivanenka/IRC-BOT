@@ -215,30 +215,30 @@ db_conn = nil
 -- Initialiser la connexion PostgreSQL
 function init_database()
     if not config.database or not config.database.enabled then
-        log_message("[DBG] init_database: database not enabled in config")
+        log_message("DBG", "init_database", "database not enabled in config")
         return false
     end
     
-    log_message("[DBG] init_database: Loading luasql.postgres module")
+    log_message("DBG", "init_database", "Loading luasql.postgres module")
     -- Charger le module luasql
     local ok, err = pcall(function() luasql = require("luasql.postgres") end)
     if not ok then
         print("⚠️ Impossible de charger luasql.postgres: " .. err)
         print("   Installez-le avec: sudo apt install lua-luasql-postgres")
-        log_message("[ERR] init_database: Failed to load luasql.postgres: " .. tostring(err))
+        log_message("ERR", "init_database", "Failed to load luasql.postgres: " .. tostring(err))
         return false
     end
-    log_message("[DBG] init_database: luasql.postgres loaded successfully")
+    log_message("DBG", "init_database", "luasql.postgres loaded successfully")
     
     -- Créer l'environnement
-    log_message("[DBG] init_database: Creating PostgreSQL environment")
+    log_message("DBG", "init_database", "Creating PostgreSQL environment")
     db_env = luasql.postgres()
     if not db_env then
         print("⚠️ Impossible de créer l'environnement PostgreSQL")
-        log_message("[ERR] init_database: Failed to create PostgreSQL environment")
+        log_message("ERR", "init_database", "Failed to create PostgreSQL environment")
         return false
     end
-    log_message("[DBG] init_database: PostgreSQL environment created")
+    log_message("DBG", "init_database", "PostgreSQL environment created")
     
     -- Se connecter à la base de données
     local conn_str = string.format("host=%s port=%d dbname=%s user=%s password=%s",
@@ -248,21 +248,21 @@ function init_database()
         config.database.user,
         config.database.password)
     
-    log_message("[DBG] init_database: Connecting to database with: " .. conn_str)
+    log_message("DBG", "init_database", "Connecting to database with: " .. conn_str)
     db_conn = db_env:connect(conn_str)
     if not db_conn then
         print("⚠️ Impossible de se connecter à PostgreSQL")
         print("   Vérifiez: host, port, database, user, password")
-        log_message("[ERR] init_database: Failed to connect to PostgreSQL")
+        log_message("ERR", "init_database", "Failed to connect to PostgreSQL")
         return false
     end
     
     print("✓ Connecté à PostgreSQL")
     log_message("SYS", "Database", "Connecté à PostgreSQL")
-    log_message("[DBG] init_database: Connection successful, db_conn is valid")
+    log_message("DBG", "init_database", "Connection successful, db_conn is valid")
     
     -- Créer la table si elle n'existe pas
-    log_message("[DBG] init_database: Creating tables")
+    log_message("DBG", "init_database", "Creating tables")
     create_menus_table()
     
     return true
@@ -361,12 +361,12 @@ local custom_menus_file = "custom_menus.dat"
 
 -- Charger les menus personnalisés (choisit entre PostgreSQL et fichier)
 function load_custom_menus()
-    log_message("[DBG] load_custom_menus: config.database.enabled=" .. tostring(config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
+    log_message("DBG", "load_custom_menus", "config.database.enabled=" .. tostring(config.database and config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
     if config.database and config.database.enabled and db_conn then
-        log_message("[DBG] load_custom_menus: Loading from PostgreSQL")
+        log_message("DBG", "load_custom_menus", "Loading from PostgreSQL")
         load_custom_menus_from_pg()
     else
-        log_message("[DBG] load_custom_menus: Loading from file")
+        log_message("DBG", "load_custom_menus", "Loading from file")
         load_custom_menus_from_file()
     end
 end
@@ -546,11 +546,11 @@ end
 -- Sauvegarder une URL nettoyée dans PostgreSQL
 function save_cleaned_url(original_url, cleaned_url, cleaned_by)
     if not db_conn then
-        log_message("[DBG] save_cleaned_url: db_conn is nil")
+        log_message("DBG", "save_cleaned_url", "db_conn is nil")
         return false
     end
     
-    log_message("[DBG] save_cleaned_url: Attempting to save URL: " .. (original_url or "nil"))
+    log_message("DBG", "save_cleaned_url", "Attempting to save URL: " .. (original_url or "nil"))
     
     local function escape_sql(str)
         return (str or ""):gsub("'", "''")
@@ -560,7 +560,7 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by)
     local domain = extract_domain(cleaned_url)
     local ip = get_ip_address(domain)
     
-    log_message("[DBG] save_cleaned_url: domain=" .. (domain or "nil") .. ", ip=" .. (ip or "nil"))
+    log_message("DBG", "save_cleaned_url", "domain=" .. (domain or "nil") .. ", ip=" .. (ip or "nil"))
     
     -- Insérer ou mettre à jour l'URL nettoyée avec IP
     -- Utilisation de INSERT ... ON CONFLICT pour PostgreSQL
@@ -583,9 +583,9 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by)
     end)
     
     if success then
-        log_message("[DBG] save_cleaned_url: SUCCESS")
+        log_message("DBG", "save_cleaned_url", "SUCCESS")
     else
-        log_message("[DBG] save_cleaned_url: FAILED - " .. tostring(result))
+        log_message("DBG", "save_cleaned_url", "FAILED - " .. tostring(result))
     end
     
     return success or false
@@ -593,9 +593,9 @@ end
 
 -- Charger les URLs nettoyées depuis PostgreSQL
 function load_cleaned_urls()
-    log_message("[DBG] load_cleaned_urls: db_conn=" .. tostring(db_conn ~= nil))
+    log_message("DBG", "load_cleaned_urls", "db_conn=" .. tostring(db_conn ~= nil))
     if not db_conn then
-        log_message("[DBG] load_cleaned_urls: db_conn is nil, returning empty")
+        log_message("DBG", "load_cleaned_urls", "db_conn is nil, returning empty")
         return {}
     end
     
@@ -619,9 +619,9 @@ function load_cleaned_urls()
         end
         cursor:close()
     else
-        log_message("[DBG] load_cleaned_urls: cursor is nil")
+        log_message("DBG", "load_cleaned_urls", "cursor is nil")
     end
-    log_message("[DBG] load_cleaned_urls: loaded " .. #urls .. " URLs")
+    log_message("DBG", "load_cleaned_urls", "loaded " .. #urls .. " URLs")
     return urls
 end
 
@@ -704,9 +704,9 @@ end
 
 -- Lister les requêtes DNS depuis PostgreSQL
 function list_dns_queries(limit)
-    log_message("[DBG] list_dns_queries: db_conn=" .. tostring(db_conn ~= nil) .. ", limit=" .. tostring(limit))
+    log_message("DBG", "list_dns_queries", "db_conn=" .. tostring(db_conn ~= nil) .. ", limit=" .. tostring(limit))
     if not db_conn then
-        log_message("[DBG] list_dns_queries: db_conn is nil, returning error")
+        log_message("DBG", "list_dns_queries", "db_conn is nil, returning error")
         return "❌ Base de données non disponible"
     end
     
@@ -816,9 +816,9 @@ function save_dns_query(domain, ip_address, requested_by)
     end)
     
     if not ok then
-        log_message("[DBG] Erreur sauvegarde DNS: " .. tostring(err))
+        log_message("DBG", "save_dns_query", "Erreur sauvegarde DNS: " .. tostring(err))
     else
-        log_message(string.format("[DBG] DNS sauvegardée: %s -> %s (par %s)", domain, resolved_ip, requested_by))
+        log_message("DBG", "save_dns_query", string.format("DNS sauvegardée: %s -> %s (par %s)", domain, resolved_ip, requested_by))
     end
 end
 
@@ -990,7 +990,7 @@ function clean_youtube_url(url, requested_by)
             coroutine.resume(co)
         end)
         if not success then
-            log_message("[DBG] Erreur coroutine DNS: " .. tostring(err))
+            log_message("DBG", "clean_youtube_url", "Erreur coroutine DNS: " .. tostring(err))
         end
     end
     
@@ -1214,12 +1214,12 @@ function handle_message(msg)
             send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
-            log_message("[DBG] !clean handler: config.database.enabled=" .. tostring(config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
+            log_message("DBG", "!clean handler", "config.database.enabled=" .. tostring(config.database and config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
             if config.database and config.database.enabled and db_conn then
-                log_message("[DBG] !clean handler: Calling save_cleaned_url")
+                log_message("DBG", "!clean handler", "Calling save_cleaned_url")
                 save_cleaned_url(url, cleaned, nick)
             else
-                log_message("[DBG] !clean handler: Skipping save_cleaned_url (db not enabled or not connected)")
+                log_message("DBG", "!clean handler", "Skipping save_cleaned_url (db not enabled or not connected)")
             end
         end
     end
@@ -1231,12 +1231,12 @@ function handle_message(msg)
     if urls_match or lasturls_match then
         local limit_str = urls_match or lasturls_match or ""
         local limit = tonumber(limit_str:match("^%s+(%d+)")) or (lasturls_match and 5 or nil)
-        log_message("[DBG] !urls handler: Calling list_cleaned_urls with limit=" .. tostring(limit))
+        log_message("DBG", "!urls handler", "Calling list_cleaned_urls with limit=" .. tostring(limit))
         send_irc_message(target, list_cleaned_urls(limit))
     elseif listurls_match then
         local limit_str = listurls_match or ""
         local limit = tonumber(limit_str:match("^%s+(%d+)")) or nil
-        log_message("[DBG] !listurls handler: Calling list_cleaned_urls_raw with limit=" .. tostring(limit))
+        log_message("DBG", "!listurls handler", "Calling list_cleaned_urls_raw with limit=" .. tostring(limit))
         send_irc_message(target, list_cleaned_urls_raw(limit))
     end
     
@@ -1246,7 +1246,7 @@ function handle_message(msg)
     if dns_match or dnsqueries_match then
         local limit_str = dns_match or dnsqueries_match or ""
         local limit = tonumber(limit_str:match("^%s+(%d+)")) or nil
-        log_message("[DBG] !dns handler: Calling list_dns_queries with limit=" .. tostring(limit))
+        log_message("DBG", "!dns handler", "Calling list_dns_queries with limit=" .. tostring(limit))
         send_irc_message(target, list_dns_queries(limit))
     end
     
@@ -1365,21 +1365,21 @@ function main()
     log_message("SYS", "Bot", "Démarrage du bot IRC")
     
     -- Initialiser la base de données (PostgreSQL) si configurée
-    log_message("[DBG] main: Initializing database...")
+    log_message("DBG", "main", "Initializing database...")
     if config.database and config.database.enabled then
-        log_message("[DBG] main: config.database.enabled=true")
+        log_message("DBG", "main", "config.database.enabled=true")
         if not init_database() then
             print("⚠️  PostgreSQL non disponible, utilise le fichier local")
-            log_message("[DBG] main: init_database() failed, db_conn=" .. tostring(db_conn ~= nil))
+            log_message("DBG", "main", "init_database() failed, db_conn=" .. tostring(db_conn ~= nil))
         else
-            log_message("[DBG] main: init_database() succeeded, db_conn=" .. tostring(db_conn ~= nil))
+            log_message("DBG", "main", "init_database() succeeded, db_conn=" .. tostring(db_conn ~= nil))
         end
     else
-        log_message("[DBG] main: config.database.enabled=false, skipping init")
+        log_message("DBG", "main", "config.database.enabled=false, skipping init")
     end
     
     -- Charger les menus personnalisés sauvegardés
-    log_message("[DBG] main: Loading custom menus...")
+    log_message("DBG", "main", "Loading custom menus...")
     load_custom_menus()
     
     -- Se connecter
