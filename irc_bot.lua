@@ -16,20 +16,17 @@
 -- =====================================================================
 
 -- Configuration
-local config = {
+config = {
     -- === CONNEXION IRC ===
     server = "irc.libera.chat",     -- Serveur IRC (irc.libera.chat, irc.oftc.net, etc.)
     port = 6667,                     -- Port (6697 pour SSL)
-    use_ssl = false,                 -- true pour SSL (port 6697)
-    
+    use_ssl = false,                -- true pour SSL (port 6697)
     -- === IDENTITÉ DU BOT ===
     nick = "titoune",               -- Nom du bot (DOIT être enregistré sur Libera.Chat)
     user = "titoune",               -- Identifiant utilisateur (généralement = nick)
     realname = "Bot YouTube Cleaner et Menu",  -- Nom affiché
-    
     -- === CANAUX ===
     channel = "#fauve",             -- Channel principal à rejoindre (DOIT exister)
-    
     -- === IDENTIFICATION NICKSERV (NÉCESSAIRE POUR LIBERA.CHAT) ===
     -- ⚠️  SI TON NICK EST ENREGISTRÉ, ACTIVE CECI :
     nickserv = {
@@ -37,7 +34,6 @@ local config = {
         password = "JusteVivreHeureuse€2029",  -- Mot de passe NickServ
         wait_time = 5,              -- Temps d'attente avant identification (secondes)
     },
-    
     -- === LOGGING (JOURNAUX) ===
     logging = {
         enabled = true,              -- Activer/désactiver le logging
@@ -49,10 +45,8 @@ local config = {
         log_pings = false,           -- Logger les PING/PONG
         log_errors = true,           -- Logger les erreurs
     },
-    
     -- === TÂCHES PLANIFIÉES ===
     hourly_date = true,              -- Exécuter /exec -o date chaque heure ronde
-    
     -- === BASE DE DONNÉES (PostgreSQL) ===
     -- Configuration pour sauvegarder les menus dans PostgreSQL
     -- Pour activer : change enabled = true et configure les paramètres
@@ -65,7 +59,7 @@ local config = {
         user = "irc_user",        -- Nom d'utilisateur PostgreSQL
         password = "irc_password", -- Mot de passe PostgreSQL
         menus_table = "custom_menus" -- Nom de la table pour les menus
-    }
+    },
 }
 
 -- Charger la configuration personnalisée si elle existe
@@ -535,6 +529,108 @@ function delete_custom_menu_from_pg(name)
     return false
 end
 
+-- Sauvegarder une URL nettoyée dans PostgreSQL
+function save_cleaned_url(original_url, cleaned_url, cleaned_by)
+    if not db_conn then return false end
+    
+    local function escape_sql(str)
+        return (str or ""):gsub("'", "''")
+    end
+    
+    -- Vérifier si l'URL originale existe déjà
+    local check_success, check_exists = pcall(function()
+        local cursor = db_conn:execute(
+            "SELECT 1 FROM cleaned_urls WHERE original_url = '" .. escape_sql(original_url) .. "'"
+        )
+        if cursor then
+            local row = cursor:fetch({}, 'a')
+            cursor:close()
+            return row ~= nil
+        end
+        return false
+    end)
+    
+    if not check_success or check_exists then
+        return false
+    end
+    
+    -- Insérer la nouvelle URL nettoyée
+    local insert_success, insert_result = pcall(function()
+        local result = db_conn:execute(
+            "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by) VALUES (" ..
+            "'" .. escape_sql(original_url) .. "', " ..
+            "'" .. escape_sql(cleaned_url) .. "', " ..
+            "NOW(), '" .. escape_sql(cleaned_by) .. "')"
+        )
+        if result and type(result) == "userdata" then
+            result:close()
+        end
+        return true
+    end)
+    
+    return insert_success or false
+end
+
+-- Charger les URLs nettoyées depuis PostgreSQL
+function load_cleaned_urls()
+    if not db_conn then return {} end
+    
+    local urls = {}
+    local cursor = db_conn:execute(
+        "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by " ..
+        "FROM cleaned_urls ORDER BY created_at DESC"
+    )
+    
+    if cursor then
+        local row = cursor:fetch({}, "a")
+        while row do
+            table.insert(urls, {
+                original_url = row.original_url,
+                cleaned_url = row.cleaned_url,
+                created_at = tonumber(row.created_at) or os.time(),
+                cleaned_by = row.cleaned_by
+            })
+            row = cursor:fetch(row, "a")
+        end
+        cursor:close()
+    end
+    return urls
+end
+
+-- Lister les URLs nettoyées
+function list_cleaned_urls(limit)
+    local urls = load_cleaned_urls()
+    limit = limit or 10  -- Par défaut, afficher les 10 dernières
+    
+    if #urls == 0 then
+        return "Aucune URL n'a été nettoyée pour l'instant."
+    end
+    
+    -- Prendre les plus récentes (déjà triées par date)
+    local recent_urls = {}
+    for i = 1, math.min(limit, #urls) do
+        table.insert(recent_urls, urls[i])
+    end
+    
+    local output = "🔍 **URLs nettoyées** (" .. #urls .. " total, " .. #recent_urls .. " affichées) :\n"
+    for i, url in ipairs(recent_urls) do
+        local ts = format_timestamp(url.created_at)
+        output = output .. string.format("%d. **%s** → %s *(par %s, %s)*\n", 
+            i, shorten_url(url.original_url, 40), shorten_url(url.cleaned_url, 40), url.cleaned_by, ts)
+    end
+    return output
+end
+
+-- Fonction utilitaire pour raccourcir les URLs
+function shorten_url(url, max_length)
+    max_length = max_length or 50
+    if #url <= max_length then
+        return url
+    else
+        return url:sub(1, max_length - 3) .. "..."
+    end
+end
+
 -- =====================================================================
 -- FONCTIONS PUBLIQUES POUR LES MENUS
 -- =====================================================================
@@ -908,7 +1004,21 @@ function handle_message(msg)
         if url then
             local cleaned = clean_youtube_url(url)
             send_irc_message(target, nick .. ": " .. cleaned)
+            
+            -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
+            if config.database and config.database.enabled and db_conn then
+                save_cleaned_url(url, cleaned, nick)
+            end
         end
+    end
+    
+    -- Commande : lister les URLs nettoyées
+    local urls_match = message:lower():match("^!urls(%s*)")
+    local lasturls_match = message:lower():match("^!lasturls(%s*)")
+    if urls_match or lasturls_match then
+        local limit_str = urls_match or lasturls_match or ""
+        local limit = tonumber(limit_str:match("^%s+(%d+)")) or (lasturls_match and 5 or nil)
+        send_irc_message(target, list_cleaned_urls(limit))
     end
     
     -- Commande : menu (menu par défaut)
@@ -919,7 +1029,7 @@ function handle_message(msg)
     
     -- Commande : aide
     if message:match("!help") or message:match("!aide") then
-        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !menu [boire|manger] - afficher le menu | " ..
+        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
                          "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)
@@ -1079,7 +1189,7 @@ function main()
     else
         welcome_msg = welcome_msg .. " (⚠️ NickServ: non configuré)"
     end
-    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help")
+    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !urls, !lasturls, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help")
     
     -- Afficher les infos dans la console
     print("\n" .. string.rep("=", 60))
@@ -1094,6 +1204,8 @@ function main()
     print(string.rep("=", 60))
     print("\nCommandes disponibles:")
     print("  !clean <url>    - Nettoyer une URL YouTube")
+    print("  !urls [N]       - Lister les URLs nettoyées")
+    print("  !lasturls [N]   - Lister les dernières URLs nettoyées")
     print("  !menu [boire|manger] - Afficher le menu")
     print("  !addmenu <nom> <texte> - Créer un menu personnalisé")
     print("  !listmenus [date|name|creator] - Lister les menus personnalisés (par date, nom ou créateur)")

@@ -38,6 +38,8 @@ make test
 | Commande | Description | Exemple |
 |----------|-------------|---------|
 | `!clean <url>` | Nettoie une URL YouTube des trackers | `!clean https://youtu.be/xyz?feature=share` |
+| `!urls [N]` | Liste toutes les URLs nettoyées (N=limite) | `!urls 5` |
+| `!lasturls [N]` | Liste les N dernières URLs nettoyées (par défaut 5) | `!lasturls 10` |
 | `!menu` | Affiche le menu complet | `!menu` |
 | `!menu boire` | Affiche les boissons | `!menu boire` |
 | `!menu manger` | Affiche la nourriture | `!menu manger` |
@@ -76,6 +78,35 @@ Dans IRC :
 ```irc
 <Toi> !clean https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share
 <Bot> Toi: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+```
+
+### Historique des URLs nettoyées
+
+Le bot peut stocker les URLs nettoyées dans PostgreSQL (si activé).
+
+**Liste toutes les URLs nettoyées :**
+```irc
+<Toi> !urls
+<Bot> 🔍 URLs nettoyées (25 total, 10 affichées) :
+       1. https://youtu.be/abc123?track=1 → https://youtu... (par claire, 2026-11-03 20:15:00)
+       2. https://youtu.be/xyz789?utm=... → https://youtu... (par bob, 2026-11-03 20:16:00)
+       ...
+```
+
+**Liste les N dernières URLs :**
+```irc
+<Toi> !urls 5
+<Bot> 🔍 URLs nettoyées (25 total, 5 affichées) :
+       1. https://youtu.be/def456 → https://youtu... (par alice, 2026-11-03 20:18:00)
+       ...
+```
+
+**Affiche les 5 dernières URLs (par défaut) :**
+```irc
+<Toi> !lasturls
+<Bot> 🔍 URLs nettoyées (25 total, 5 affichées) :
+       1. https://youtu.be/def456 → https://youtu... (par alice, 2026-11-03 20:18:00)
+       ...
 ```
 
 ---
