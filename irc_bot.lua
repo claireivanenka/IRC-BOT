@@ -1150,63 +1150,70 @@ function clean_youtube_url(url, requested_by)
             cleaned_url = "https://" .. url
         end
         
-        -- Extraire la base de l'URL (sans paramètres ni fragments)
-        local base_url = cleaned_url:match("^(https?://[^%?#]+)") or cleaned_url
+        -- Nettoyer les fragments (#) d'abord
+        cleaned_url = cleaned_url:gsub("#.*", "")
         
-        -- Nettoyer les paramètres de tracking connus
-        -- Supprimer les paramètres UTM, gclid, fbclid, refer_*, etc.
-        local query_string = cleaned_url:match("?(.+)") or ""
-        
-        if query_string ~= "" then
-            -- Liste des préfixes et noms de paramètres de tracking à supprimer
-            local tracking_params = {
-                -- Préfixes standards
-                "utm_", "gclid", "fbclid", "refer_", "srch_", "sprefix", 
-                "_x_", "session", "track", "click", "ad_", "campaign", 
-                "source", "medium", "term", "content", "adgroup",
-                -- Préfixes Temu et similaires
-                "freesia_", "_oak_", "_mp_", "_rec_", "page_", 
-                -- Paramètres spécifiques Temu
-                "scene", "gallery_order", "mp_inf", "rec_ext", "sessn",
-                "refer_page", "freesia_scene"
-            }
+        -- Pour les URLs qui finissent par .html, .php, .asp, etc., supprimer TOUS les paramètres
+        -- Cela simplifie les URLs de type Temu, Amazon, etc.
+        if cleaned_url:match("%.[a-z]+%?") then
+            -- Supprimer tout ce qui vient après le premier ? (y compris le ?)
+            cleaned_url = cleaned_url:gsub("%?.*", "")
+        else
+            -- Extraire la base de l'URL (sans paramètres ni fragments)
+            local base_url = cleaned_url:match("^(https?://[^%?#]+)") or cleaned_url
             
-            -- Séparer les paramètres et garder seulement ceux qui ne sont pas du tracking
-            local params = {}
-            for param in query_string:gmatch("([^&]+)") do
-                local key = param:match("^([^=]+)") or param
-                local is_tracking = false
+            -- Nettoyer les paramètres de tracking connus
+            -- Supprimer les paramètres UTM, gclid, fbclid, refer_*, etc.
+            local query_string = cleaned_url:match("?(.+)") or ""
+            
+            if query_string ~= "" then
+                -- Liste des préfixes et noms de paramètres de tracking à supprimer
+                local tracking_params = {
+                    -- Préfixes standards
+                    "utm_", "gclid", "fbclid", "refer_", "srch_", "sprefix", 
+                    "_x_", "session", "track", "click", "ad_", "campaign", 
+                    "source", "medium", "term", "content", "adgroup",
+                    -- Préfixes Temu et similaires
+                    "freesia_", "_oak_", "_mp_", "_rec_", "page_", 
+                    -- Paramètres spécifiques Temu
+                    "scene", "gallery_order", "mp_inf", "rec_ext", "sessn",
+                    "refer_page", "freesia_scene"
+                }
                 
-                if key then
-                    local key_lower = key:lower()
-                    -- Vérifier si le paramètre commence par un des préfixes de tracking
-                    -- ou correspond exactement à un nom de paramètre de tracking
-                    for _, prefix in ipairs(tracking_params) do
-                        if key_lower:find(prefix:lower(), 1, true) == 1 or key_lower == prefix:lower() then
-                            is_tracking = true
-                            break
+                -- Séparer les paramètres et garder seulement ceux qui ne sont pas du tracking
+                local params = {}
+                for param in query_string:gmatch("([^&]+)") do
+                    local key = param:match("^([^=]+)") or param
+                    local is_tracking = false
+                    
+                    if key then
+                        local key_lower = key:lower()
+                        -- Vérifier si le paramètre commence par un des préfixes de tracking
+                        -- ou correspond exactement à un nom de paramètre de tracking
+                        for _, prefix in ipairs(tracking_params) do
+                            if key_lower:find(prefix:lower(), 1, true) == 1 or key_lower == prefix:lower() then
+                                is_tracking = true
+                                break
+                            end
                         end
+                    end
+                    
+                    -- Garder le paramètre s'il n'est pas du tracking
+                    if not is_tracking then
+                        table.insert(params, param)
                     end
                 end
                 
-                -- Garder le paramètre s'il n'est pas du tracking
-                if not is_tracking then
-                    table.insert(params, param)
+                -- Reconstruire la query string si des paramètres importants restent
+                if #params > 0 then
+                    cleaned_url = base_url .. "?" .. table.concat(params, "&")
+                else
+                    cleaned_url = base_url
                 end
-            end
-            
-            -- Reconstruire la query string si des paramètres importants restent
-            if #params > 0 then
-                cleaned_url = base_url .. "?" .. table.concat(params, "&")
             else
                 cleaned_url = base_url
             end
-        else
-            cleaned_url = base_url
         end
-        
-        -- Supprimer les fragments (#)
-        cleaned_url = cleaned_url:gsub("#.*", "")
     end
     
     -- Extraire le domaine pour la requête DNS
