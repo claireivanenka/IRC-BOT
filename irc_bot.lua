@@ -587,7 +587,8 @@ function delete_custom_menu(name)
 end
 
 -- Lister tous les menus personnalisés
-function list_custom_menus()
+-- @param sort_by: nil (par défaut, ordre d'insertion), "date" (du plus récent au plus ancien), "name" (alphabétique), "creator" (par créateur)
+function list_custom_menus(sort_by)
     -- Filtrer les menus sans nom (pour éviter les entrées corrompues)
     local valid_menus = {}
     for _, menu in ipairs(custom_menus) do
@@ -598,6 +599,21 @@ function list_custom_menus()
     
     if #valid_menus == 0 then
         return "Aucun menu personnalisé n'a été créé."
+    end
+    
+    -- Trier selon le paramètre
+    if sort_by == "date" then
+        table.sort(valid_menus, function(a, b)
+            return (a.created_at or 0) > (b.created_at or 0)  -- Plus récent en premier
+        end)
+    elseif sort_by == "name" then
+        table.sort(valid_menus, function(a, b)
+            return a.name:lower() < b.name:lower()
+        end)
+    elseif sort_by == "creator" then
+        table.sort(valid_menus, function(a, b)
+            return (a.created_by or ""):lower() < (b.created_by or ""):lower()
+        end)
     end
     
     local count = #valid_menus
@@ -887,7 +903,7 @@ function handle_message(msg)
     if message:match("!help") or message:match("!aide") then
         local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
-                         "!listmenus - lister les menus | !showmenu <nom> - afficher un menu | !ping - tester le bot | !help - aide"
+                         "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)
     end
     
@@ -937,12 +953,17 @@ function handle_message(msg)
         send_irc_message(target, nick .. ": ❌ Utilisation: !delmenu <nom>")
     end
     
-    -- Lister les menus : !listmenus ou !listmenu (sans argument)
-    if message:lower():match("^!listmenus$") then
-        send_irc_message(target, list_custom_menus())
-    elseif message:lower():match("^!listmenu$") then
-        -- !listmenu sans argument = alias de !listmenus
-        send_irc_message(target, list_custom_menus())
+    -- Lister les menus : !listmenus [date|name|creator] ou !listmenu [date|name|creator]
+    local list_match = message:lower():match("^!listmenus(%s*)")
+    local listmenu_match = message:lower():match("^!listmenu(%s*)")
+    if list_match or listmenu_match then
+        local sort_by = nil
+        if list_match ~= "" then
+            sort_by = list_match:match("^%s+(%S+)")
+        elseif listmenu_match ~= "" then
+            sort_by = listmenu_match:match("^%s+(%S+)")
+        end
+        send_irc_message(target, list_custom_menus(sort_by))
     end
     
     -- Afficher un menu : !showmenu NomDuMenu ou !listmenu NomDuMenu
@@ -1050,7 +1071,7 @@ function main()
     print("  !clean <url>    - Nettoyer une URL YouTube")
     print("  !menu [boire|manger] - Afficher le menu")
     print("  !addmenu <nom> <texte> - Créer un menu personnalisé")
-    print("  !listmenus       - Lister les menus personnalisés")
+    print("  !listmenus [date|name|creator] - Lister les menus personnalisés (par date, nom ou créateur)")
     print("  !showmenu <nom>  - Afficher un menu personnalisé")
     print("  !delmenu <nom>   - Supprimer un menu personnalisé")
     print("  !ping            - Tester si le bot répond")
