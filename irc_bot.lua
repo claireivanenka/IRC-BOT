@@ -559,7 +559,7 @@ function list_custom_menus()
     local count = #custom_menus
     local output = "📋 **Menus personnalisés** (" .. count .. ") :\n"
     for i, menu in ipairs(custom_menus) do
-        output = output .. string.format("%d. **%s** - Créé par %s le %s\n", 
+        output = output .. string.format("%d. **%s** *(par %s)* - %s\n", 
             i, menu.name, menu.created_by, format_timestamp(menu.created_at))
     end
     output = output .. "\nUtilisez !showmenu <nom> pour afficher un menu, !delmenu <nom> pour le supprimer"
@@ -571,7 +571,7 @@ function show_custom_menu(name)
     for _, menu in ipairs(custom_menus) do
         if menu.name:lower() == name:lower() then
             local timestamp = format_timestamp(menu.created_at)
-            return string.format("=== Menu: %s ===\nCréé par %s le %s\n\n%s", 
+            return string.format("=== Menu: %s ===\n👤 Créé par: %s\n⏰ Le: %s\n\n📝 %s", 
                 menu.name, menu.created_by, timestamp, menu.content)
         end
     end
@@ -869,7 +869,7 @@ function handle_message(msg)
                 local menu, err = add_custom_menu(name, content, nick)
                 if menu then
                     local ts = format_timestamp(menu.created_at)
-                    send_irc_message(target, nick .. ": ✅ Menu '" .. menu.name .. "' créé avec succès ! (" .. ts .. ")")
+                    send_irc_message(target, nick .. ": ✅ Menu '" .. menu.name .. "' créé avec succès ! (par " .. nick .. ", " .. ts .. ")")
                 else
                     send_irc_message(target, nick .. ": ❌ " .. err)
                 end
