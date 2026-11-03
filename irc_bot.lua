@@ -545,12 +545,13 @@ end
 
 -- Sauvegarder une URL nettoyée dans PostgreSQL
 function save_cleaned_url(original_url, cleaned_url, cleaned_by)
+    log_message("DBG", "save_cleaned_url", "Called with url=" .. tostring(original_url) .. ", cleaned=" .. tostring(cleaned_url) .. ", by=" .. tostring(cleaned_by))
     if not db_conn then
         log_message("DBG", "save_cleaned_url", "db_conn is nil")
         return false
     end
     
-    log_message("DBG", "save_cleaned_url", "Attempting to save URL: " .. (original_url or "nil"))
+    log_message("DBG", "save_cleaned_url", "db_conn is valid, attempting to save URL: " .. (original_url or "nil"))
     
     local function escape_sql(str)
         return (str or ""):gsub("'", "''")
@@ -1209,8 +1210,10 @@ function handle_message(msg)
     if message:match("!clean %S+") then
         local url = message:match("!clean (%S+)")
         if url then
+            log_message("DBG", "!clean handler", "Processing URL: " .. url)
             local cleaned, domain = clean_youtube_url(url, nick)
             local ip = get_ip_address(domain)
+            log_message("DBG", "!clean handler", "cleaned=" .. tostring(cleaned) .. ", domain=" .. tostring(domain) .. ", ip=" .. tostring(ip))
             send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
