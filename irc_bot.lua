@@ -557,6 +557,11 @@ function add_custom_menu(name, content, creator)
     
     table.insert(custom_menus, new_menu)
     
+    -- Trier automatiquement par date (du plus récent au plus ancien)
+    table.sort(custom_menus, function(a, b)
+        return (a.created_at or 0) > (b.created_at or 0)
+    end)
+    
     -- Sauvegarder selon la configuration
     if config.database and config.database.enabled and db_conn then
         save_custom_menu_to_pg(new_menu)
