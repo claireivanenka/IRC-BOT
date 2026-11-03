@@ -1530,7 +1530,11 @@ function handle_message(msg)
         local limit_str = urls_match or lasturls_match or ""
         local limit = tonumber(limit_str:match("^%s+(%d+)")) or (lasturls_match and 5 or nil)
         log_message("DBG", "!urls handler", "Calling list_cleaned_urls with limit=" .. tostring(limit))
-        send_irc_message(target, list_cleaned_urls(limit))
+        local result = list_cleaned_urls(limit)
+        -- Envoyer chaque ligne comme un message séparé pour éviter le wrapping
+        for line in result:gmatch("[^\n]+") do
+            send_irc_message(target, line)
+        end
     elseif listurls_match then
         local limit_str = listurls_match or ""
         local limit = tonumber(limit_str:match("^%s+(%d+)")) or nil
