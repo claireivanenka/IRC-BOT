@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS cleaned_urls (
     cleaned_url TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     cleaned_by VARCHAR(100) NOT NULL,
+    ip_address VARCHAR(45),  -- Adresse IP du domaine (IPv4 ou IPv6)
     UNIQUE(original_url)  -- Éviter les doublons de la même URL
 );
 
@@ -23,16 +24,18 @@ COMMENT ON COLUMN cleaned_urls.original_url IS 'URL YouTube originale avec param
 COMMENT ON COLUMN cleaned_urls.cleaned_url IS 'URL YouTube nettoyée (sans trackers)';
 COMMENT ON COLUMN cleaned_urls.created_at IS 'Date et heure du nettoyage';
 COMMENT ON COLUMN cleaned_urls.cleaned_by IS 'Nick IRC de la personne qui a demandé le nettoyage';
+COMMENT ON COLUMN cleaned_urls.ip_address IS 'Adresse IP du domaine de l\'URL nettoyée';
 
 -- =====================================================================
 -- Exemple d'insertion
 -- =====================================================================
 
--- INSERT INTO cleaned_urls (original_url, cleaned_url, cleaned_by)
+-- INSERT INTO cleaned_urls (original_url, cleaned_url, cleaned_by, ip_address)
 -- VALUES (
 --     'https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share&utm_source=twitter',
 --     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
---     'claire'
+--     'claire',
+--     '142.250.186.46'  -- IP de youtube.com
 -- );
 
 -- =====================================================================

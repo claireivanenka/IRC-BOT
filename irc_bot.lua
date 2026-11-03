@@ -554,13 +554,17 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by)
         return false
     end
     
-    -- Insérer la nouvelle URL nettoyée
+    -- Extraire le domaine et obtenir l'IP
+    local domain = extract_domain(cleaned_url)
+    local ip = get_ip_address(domain)
+    
+    -- Insérer la nouvelle URL nettoyée avec IP
     local insert_success, insert_result = pcall(function()
         local result = db_conn:execute(
-            "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by) VALUES (" ..
+            "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address) VALUES (" ..
             "'" .. escape_sql(original_url) .. "', " ..
             "'" .. escape_sql(cleaned_url) .. "', " ..
-            "NOW(), '" .. escape_sql(cleaned_by) .. "')"
+            "NOW(), '" .. escape_sql(cleaned_by) .. "', '" .. escape_sql(ip) .. "')"
         )
         if result and type(result) == "userdata" then
             result:close()
@@ -577,7 +581,7 @@ function load_cleaned_urls()
     
     local urls = {}
     local cursor = db_conn:execute(
-        "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by " ..
+        "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address " ..
         "FROM cleaned_urls ORDER BY created_at DESC"
     )
     
@@ -588,7 +592,8 @@ function load_cleaned_urls()
                 original_url = row.original_url,
                 cleaned_url = row.cleaned_url,
                 created_at = tonumber(row.created_at) or os.time(),
-                cleaned_by = row.cleaned_by
+                cleaned_by = row.cleaned_by,
+                ip_address = row.ip_address or "N/A"
             })
             row = cursor:fetch(row, "a")
         end
@@ -615,8 +620,11 @@ function list_cleaned_urls(limit)
     local output = "🔍 **URLs nettoyées** (" .. #urls .. " total, " .. #recent_urls .. " affichées) :\n"
     for i, url in ipairs(recent_urls) do
         local ts = format_timestamp(url.created_at)
-        output = output .. string.format("%d. **%s** → %s *(par %s, %s)*\n", 
-            i, shorten_url(url.original_url, 40), shorten_url(url.cleaned_url, 40), url.cleaned_by, ts)
+        local original_short = shorten_url(url.original_url, 35)
+        local cleaned_short = shorten_url(url.cleaned_url, 35)
+        local ip = url.ip_address or "N/A"
+        output = output .. string.format("%d. **%s** → %s [IP:%s] *(par %s, %s)*\n", 
+            i, original_short, cleaned_short, ip, url.cleaned_by, ts)
     end
     return output
 end
@@ -629,6 +637,36 @@ function shorten_url(url, max_length)
     else
         return url:sub(1, max_length - 3) .. "..."
     end
+end
+
+-- Fonction utilitaire pour extraire le domaine d'une URL
+function extract_domain(url)
+    -- Supprimer le protocole (http://, https://)
+    local domain = url:gsub("^%a+://", "")
+    -- Supprimer le chemin et les paramètres
+    domain = domain:gsub("/[^?#]*", "")
+    domain = domain:gsub("?[^%s]*", "")
+    domain = domain:gsub("#[^%s]*", "")
+    -- Supprimer les espaces et retours à la ligne
+    domain = domain:gsub("%s+", "")
+    return domain
+end
+
+-- Fonction utilitaire pour obtenir l'adresse IP d'un domaine
+function get_ip_address(domain)
+    if not domain or domain == "" then return "N/A" end
+    
+    -- Si c'est déjà une IP
+    if domain:match("^%d+%.%d+%.%d+%.%d+$") then
+        return domain
+    end
+    
+    local socket = require("socket")
+    local ok, ip = pcall(function()
+        return socket.dns.toip(domain)
+    end)
+    
+    return ok and ip or "N/A"
 end
 
 -- =====================================================================
@@ -1003,7 +1041,9 @@ function handle_message(msg)
         local url = message:match("!clean (%S+)")
         if url then
             local cleaned = clean_youtube_url(url)
-            send_irc_message(target, nick .. ": " .. cleaned)
+            local domain = extract_domain(cleaned)
+            local ip = get_ip_address(domain)
+            send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
             if config.database and config.database.enabled and db_conn then

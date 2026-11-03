@@ -77,19 +77,21 @@ Le bot supprime tous les **paramètres de tracking** des URLs YouTube :
 Dans IRC :
 ```irc
 <Toi> !clean https://www.youtube.com/watch?v=dQw4w9WgXcQ&feature=share
-<Bot> Toi: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+<Bot> Toi: https://www.youtube.com/watch?v=dQw4w9WgXcQ [IP: 142.250.186.46]
 ```
+
+> ✅ Chaque URL nettoyée affiche maintenant **son adresse IP**
 
 ### Historique des URLs nettoyées
 
-Le bot peut stocker les URLs nettoyées dans PostgreSQL (si activé).
+Le bot peut stocker les URLs nettoyées dans PostgreSQL (si activé). Chaque entrée inclut l'adresse IP du domaine.
 
 **Liste toutes les URLs nettoyées :**
 ```irc
 <Toi> !urls
 <Bot> 🔍 URLs nettoyées (25 total, 10 affichées) :
-       1. https://youtu.be/abc123?track=1 → https://youtu... (par claire, 2026-11-03 20:15:00)
-       2. https://youtu.be/xyz789?utm=... → https://youtu... (par bob, 2026-11-03 20:16:00)
+       1. https://youtu.be/abc123?track=1 → https://youtu... [IP:142.250.186.46] (par claire, 2026-11-03 20:15:00)
+       2. https://youtu.be/xyz789?utm=... → https://youtu... [IP:142.250.186.46] (par bob, 2026-11-03 20:16:00)
        ...
 ```
 
