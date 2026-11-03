@@ -1052,11 +1052,12 @@ function handle_message(msg)
         end
     end
     
-    -- Commande : lister les URLs nettoyées
+    -- Commande : lister les URLs nettoyées (!urls, !lasturls, ou !listurls)
     local urls_match = message:lower():match("^!urls(%s*)")
     local lasturls_match = message:lower():match("^!lasturls(%s*)")
-    if urls_match or lasturls_match then
-        local limit_str = urls_match or lasturls_match or ""
+    local listurls_match = message:lower():match("^!listurls(%s*)")
+    if urls_match or lasturls_match or listurls_match then
+        local limit_str = urls_match or lasturls_match or listurls_match or ""
         local limit = tonumber(limit_str:match("^%s+(%d+)")) or (lasturls_match and 5 or nil)
         send_irc_message(target, list_cleaned_urls(limit))
     end
@@ -1069,7 +1070,7 @@ function handle_message(msg)
     
     -- Commande : aide
     if message:match("!help") or message:match("!aide") then
-        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !menu [boire|manger] - afficher le menu | " ..
+        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - alias de !urls | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
                          "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)
@@ -1229,7 +1230,7 @@ function main()
     else
         welcome_msg = welcome_msg .. " (⚠️ NickServ: non configuré)"
     end
-    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !urls, !lasturls, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help")
+    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !urls, !lasturls, !listurls, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help")
     
     -- Afficher les infos dans la console
     print("\n" .. string.rep("=", 60))
@@ -1245,7 +1246,8 @@ function main()
     print("\nCommandes disponibles:")
     print("  !clean <url>    - Nettoyer une URL YouTube")
     print("  !urls [N]       - Lister les URLs nettoyées")
-    print("  !lasturls [N]   - Lister les dernières URLs nettoyées")
+    print("  !lasturls [N]   - Lister les N dernières URLs nettoyées (défaut: 5)")
+    print("  !listurls [N]   - Alias de !urls")
     print("  !menu [boire|manger] - Afficher le menu")
     print("  !addmenu <nom> <texte> - Créer un menu personnalisé")
     print("  !listmenus [date|name|creator] - Lister les menus personnalisés (par date, nom ou créateur)")
