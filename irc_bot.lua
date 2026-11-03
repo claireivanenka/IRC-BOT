@@ -601,12 +601,13 @@ function list_custom_menus()
     end
     
     local count = #valid_menus
-    local output = "📋 **Menus personnalisés** (" .. count .. ") :\n"
+    local output = "📋 **Menus personnalisés** (" .. count .. ") : "
+    local menu_list = {}
     for i, menu in ipairs(valid_menus) do
-        output = output .. string.format("%d. **%s** *(par %s)* - %s\n", 
-            i, menu.name, menu.created_by or "inconnu", format_timestamp(menu.created_at or os.time()))
+        table.insert(menu_list, string.format("%d. **%s** *(par %s)* - %s", 
+            i, menu.name, menu.created_by or "inconnu", format_timestamp(menu.created_at or os.time())))
     end
-    output = output .. "\nUtilisez !showmenu <nom> pour afficher un menu, !delmenu <nom> pour le supprimer"
+    output = output .. table.concat(menu_list, " | ")
     return output
 end
 
