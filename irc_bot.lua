@@ -33,8 +33,8 @@ local config = {
     -- === IDENTIFICATION NICKSERV (NÉCESSAIRE POUR LIBERA.CHAT) ===
     -- ⚠️  SI TON NICK EST ENREGISTRÉ, ACTIVE CECI :
     nickserv = {
-        enabled = false,            -- true pour activer l'identification automatique
-        password = "ton_mot_de_passe_nickserv",  -- Mot de passe NickServ
+        enabled = true,            -- true pour activer l'identification automatique
+        password = "JusteVivreHeureuse€2029",  -- Mot de passe NickServ
         wait_time = 5,              -- Temps d'attente avant identification (secondes)
     },
     
@@ -304,7 +304,7 @@ function connect_irc()
     print("Connexion à " .. config.server .. ":" .. config.port .. "...")
     
     irc_socket = tcp()
-    irc_socket:settimeout(0.1)  -- Timeout court pour vérifier régulièrement
+    irc_socket:settimeout(5)  -- Timeout plus long pour la connexion initiale
     
     local result, err = irc_socket:connect(config.server, config.port)
     if not result then
@@ -313,38 +313,40 @@ function connect_irc()
         return false
     end
     
+    -- Réduire le timeout pour la lecture des messages
+    irc_socket:settimeout(0.5)
+    
     if config.use_ssl then
         irc_socket = ssl.wrap(irc_socket, {mode = "client", protocol = "tlsv1_2"})
-        irc_socket:handshake()
+        local ok, ssl_err = pcall(function() irc_socket:handshake() end)
+        if not ok then
+            print("❌ Erreur SSL: " .. ssl_err)
+            log_message("ERR", "SSL", ssl_err)
+            return false
+        end
     end
     
     -- Authentification
     irc_socket:send("NICK " .. config.nick .. "\r\n")
     irc_socket:send("USER " .. config.user .. " 0 * :" .. config.realname .. "\r\n")
     
-    -- ========================================================================
-    -- IDENTIFICATION AUPRÈS DE NICKSERV (nécessaire pour Libera.Chat)
-    -- ========================================================================
-    -- Si ton nick est enregistré sur Libera.Chat, décommente et modifie :
-    --
-    -- config.nickserv = {
-    --     enabled = true,           -- Activer l'identification
-    --     password = "ton_mot_de_passe_nickserv",  -- Mot de passe NickServ
-    --     wait_time = 5,            -- Temps d'attente avant identification (secondes)
-    -- }
-    --
-    -- Pour enregistrer ton nick : /MSG NickServ REGISTER ton@email.com mot_de_passe
-    -- ========================================================================
-    
     -- Identification automatique à NickServ si configuré
+    -- ⚠️ CRITIQUE SUR LIBERA.CHAT: Sans identification, le bot sera déconnecté après quelques minutes
     if config.nickserv and config.nickserv.enabled and config.nickserv.password then
-        socket.sleep(config.nickserv.wait_time or 2)
+        print("⏳ Attente avant identification NickServ...")
+        socket.sleep(config.nickserv.wait_time or 5)  -- Attendre 5 secondes pour la stabilité
         irc_socket:send("PRIVMSG NickServ :IDENTIFY " .. config.nickserv.password .. "\r\n")
-        print("✓ Identification NickServ envoyée")
+        print("✓ Identification NickServ envoyée pour " .. config.nick)
         log_message("SYS", "NickServ", "Identification envoyée pour " .. config.nick)
     else
-        print("⚠️  NickServ non configuré. Si ton nick est enregistré, configure config.nickserv")
-        print("    Exemple : config.nickserv = {enabled = true, password = 'ton_mot_de_passe'}")
+        print("⚠️  ⚠️  ⚠️ ATTENTION: NickServ N'EST PAS CONFIGURÉ !")
+        print("    Sur Libera.Chat, ton bot sera déconnecté après quelques minutes.")
+        print("    Pour configurer NickServ:")
+        print("      1. Enregistre ton nick: /MSG NickServ REGISTER ton@email.com ton_mot_de_passe")
+        print("      2. Valide avec le code reçu par email")
+        print("      3. Dans irc_bot.lua, configure:")
+        print("         config.nickserv = {enabled = true, password = 'ton_mot_de_passe'}")
+        print("    ⚠️  ⚠️  ⚠️")
     end
     
     connected = true
@@ -578,21 +580,35 @@ function main()
         -- Lire les messages
         local line = irc_socket:receive()
         if line then
-            -- Logger la ligne brute (optionnel, pour debug)
-            -- log_message("RAW", "Server", line)
-            
-            local msg = parse_irc_message(line)
-            if msg then
-                -- Logger les différents types de messages
-                if msg.type == "message" then
-                    handle_message(msg)
-                elseif msg.type == "join" then
-                    log_message("JOIN", msg.nick, "a rejoint " .. msg.channel)
-                elseif msg.type == "ping" then
-                    -- PING/PONG déjà logger dans parse_irc_message
-                elseif msg.type == "welcome" then
-                    log_message("SYS", "Server", "Messages de bienvenue reçus")
+            -- ⚠️ CORRECTION CRITIQUE: Gestion prioritaire des PING pour éviter le timeout
+            -- Le serveur envoie un PING toutes les 5 minutes. Si on ne répond pas, on est déconnecté.
+            if line:match("^PING") then
+                local token = line:match("^PING :(.+)") or line:match("^PING (%S+)")
+                if token then
+                    irc_socket:send("PONG :" .. token .. "\r\n")
+                    log_message("PING", "Server", "Réponse PONG envoyée pour: " .. token)
                 end
+            else
+                -- Logger la ligne brute (optionnel, pour debug)
+                -- log_message("RAW", "Server", line)
+                
+                local msg = parse_irc_message(line)
+                if msg then
+                    -- Logger les différents types de messages
+                    if msg.type == "message" then
+                        handle_message(msg)
+                    elseif msg.type == "join" then
+                        log_message("JOIN", msg.nick, "a rejoint " .. msg.channel)
+                    elseif msg.type == "welcome" then
+                        log_message("SYS", "Server", "Messages de bienvenue reçus")
+                    end
+                end
+            end
+        else
+            -- Timeout sur receive, vérifier si toujours connecté
+            -- Cela peut arriver si le serveur ne send rien pendant un moment
+            if not connected then
+                break
             end
         end
         
