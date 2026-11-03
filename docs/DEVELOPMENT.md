@@ -184,7 +184,139 @@ check_daily_welcome()
 
 ---
 
-### 5. Ajouter un système de plugins
+### 5. Travailler avec la base de données PostgreSQL
+
+#### Architecture de la base de données
+
+Le bot utilise `luasql.postgres` pour interagir avec PostgreSQL. Voici comment étendre les fonctionnalités de la base de données.
+
+#### Exemple : Ajouter une nouvelle table
+
+1. **Crée la table en SQL** :
+```sql
+CREATE TABLE user_preferences (
+    id SERIAL PRIMARY KEY,
+    nick VARCHAR(100) NOT NULL UNIQUE,
+    favorite_drink VARCHAR(100),
+    theme VARCHAR(50) DEFAULT 'light',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+2. **Ajoute la fonction de connexion dans le bot** :
+```lua
+-- Dans init_database()
+function init_database()
+    local luasql = require("luasql.postgres")
+    db_env = luasql.postgres()
+    
+    -- Connexion
+    db_conn = db_env:connect(
+        config.database.database,
+        config.database.user,
+        config.database.password,
+        config.database.host,
+        config.database.port
+    )
+    
+    if not db_conn then return false end
+    
+    -- Crée les tables si elles n'existent pas
+    create_menus_table()
+    create_user_preferences_table()  -- Nouvelle fonction
+    
+    return true
+end
+
+function create_user_preferences_table()
+    db_conn:execute([[ 
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            id SERIAL PRIMARY KEY,
+            nick VARCHAR(100) NOT NULL UNIQUE,
+            favorite_drink VARCHAR(100),
+            theme VARCHAR(50) DEFAULT 'light',
+            created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    ]])
+end
+```
+
+3. **Ajoute des fonctions utilitaires** :
+```lua
+-- Sauvegarder les préférences d'un utilisateur
+function save_user_preferences(nick, preferences)
+    if not db_conn then return false end
+    
+    local cursor = db_conn:execute(
+        "SELECT 1 FROM user_preferences WHERE nick = '" .. escape_sql(nick) .. "'"
+    )
+    
+    if cursor and cursor:fetch() then
+        -- Update
+        cursor:close()
+        db_conn:execute(
+            "UPDATE user_preferences SET favorite_drink = '" .. escape_sql(preferences.favorite_drink) .. "', " ..
+            "theme = '" .. escape_sql(preferences.theme) .. "' " ..
+            "WHERE nick = '" .. escape_sql(nick) .. "'"
+        )
+    else
+        -- Insert
+        if cursor then cursor:close() end
+        db_conn:execute(
+            "INSERT INTO user_preferences (nick, favorite_drink, theme) VALUES (" ..
+            "'" .. escape_sql(nick) .. "', " ..
+            "'" .. escape_sql(preferences.favorite_drink) .. "', " ..
+            "'" .. escape_sql(preferences.theme) .. "')"
+        )
+    end
+    return true
+end
+
+-- Charger les préférences
+function load_user_preferences(nick)
+    if not db_conn then return nil end
+    
+    local cursor = db_conn:execute(
+        "SELECT * FROM user_preferences WHERE nick = '" .. escape_sql(nick) .. "'"
+    )
+    
+    if not cursor then return nil end
+    
+    local row = cursor:fetch({}, "a")
+    cursor:close()
+    return row
+end
+```
+
+#### Exemple : Commande pour gérer les préférences
+
+```lua
+-- Dans handle_message :
+local set_pref = message:match(command_prefix .. "set_pref (%S+) (%S+) (.+)")
+if set_pref then
+    local nick_pref = set_pref
+    local pref_type = set_pref
+    local pref_value = set_pref
+    
+    -- Sauvegarde dans la base
+    save_user_preferences(msg.nick, {
+        [pref_type] = pref_value
+    })
+    
+    send_irc_message(target, "✅ Préférence " .. pref_type .. " mise à jour pour " .. msg.nick)
+end
+```
+
+#### Conseils pour PostgreSQL
+
+- **Échappement des strings** : Toujours utiliser une fonction d'échappement pour éviter les injections SQL
+- **Gestion des erreurs** : Vérifie que `db_conn` est valide avant chaque requête
+- **Fermeture des cursors** : N'oublie pas de fermer les cursors après utilisation
+- **Transactions** : Pour les opérations multiples, utilise des transactions
+
+---
+
+### 6. Ajouter un système de plugins
 
 #### Architecture de base :
 

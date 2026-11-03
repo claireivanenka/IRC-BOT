@@ -504,6 +504,191 @@ config = {
 
 ---
 
+## 🗄️ Problèmes avec PostgreSQL
+
+### Erreur : `module 'luasql.postgres' not found`
+
+**Cause** : La bibliothèque luasql.postgres n'est pas installée.
+
+**Solution** :
+```bash
+# Sur Debian/Ubuntu
+sudo apt install lua-sql-postgres
+
+# Ou avec LuaRocks
+luarocks install luasql-postgres
+```
+
+**Vérification** :
+```bash
+lua -e "require('luasql.postgres'); print('OK')"
+```
+
+---
+
+### Erreur : `connection failed: could not connect to server`
+
+**Causes possibles** :
+1. PostgreSQL n'est pas démarré
+2. Mauvais identifiants
+3. Mauvaise adresse IP/port
+4. Firewall bloquant la connexion
+
+**Solutions** :
+
+**1. Vérifier que PostgreSQL est démarré** :
+```bash
+sudo systemctl status postgresql
+```
+
+Si non démarré :
+```bash
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+**2. Tester la connexion manuellement** :
+```bash
+psql -h localhost -p 5432 -U irc_user -d irc_bot
+```
+
+**3. Vérifier les identifiants** dans `config.lua` :
+```lua
+database = {
+    host = "localhost",
+    port = 5432,
+    database = "irc_bot",
+    user = "irc_user",
+    password = "ton_mot_de_passe",
+}
+```
+
+**4. Vérifier le firewall** :
+```bash
+sudo ufw allow 5432
+```
+
+---
+
+### Erreur : `relation 'custom_menus' does not exist`
+
+**Cause** : La table n'a pas été créée.
+
+**Solution 1** : Le bot essaie de créer la table automatiquement. Si cela échoue :
+
+**Solution 2** : Crée la table manuellement :
+```bash
+psql -U irc_user -d irc_bot -f docs/database_schema.sql
+```
+
+Ou exécute ces commandes :
+```sql
+CREATE TABLE custom_menus (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_by VARCHAR(100) NOT NULL
+);
+```
+
+---
+
+### Erreur : `permission denied for table custom_menus`
+
+**Cause** : L'utilisateur PostgreSQL n'a pas les permissions sur la table.
+
+**Solution** :
+```bash
+# Se connecter en tant que postgres
+sudo -u postgres psql
+
+# Donner les permissions
+GRANT ALL PRIVILEGES ON TABLE custom_menus TO irc_user;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO irc_user;
+
+# Quitter
+\q
+```
+
+---
+
+### Le bot ne sauvegarde pas en PostgreSQL mais ne donne pas d'erreur
+
+**Causes possibles** :
+1. `enabled = false` dans la configuration
+2. La connexion a échoué silencieusement
+3. La table n'existe pas
+
+**Solutions** :
+
+**1. Vérifier que PostgreSQL est activé** :
+```lua
+-- Dans config.lua ou config_custom.lua
+database = {
+    enabled = true,  -- Doit être true !
+    -- ...
+}
+```
+
+**2. Vérifier les logs du bot** :
+```bash
+tail -f irc_bot.log | grep -i postgres
+```
+
+**3. Tester la connexion manuellement** :
+```lua
+# Dans un fichier test_db.lua
+local luasql = require("luasql.postgres")
+local env = luasql.postgres()
+local conn = env:connect("irc_bot", "irc_user", "ton_mot_de_passe", "localhost", 5432)
+
+if conn then
+    print("✓ Connexion réussie")
+    conn:close()
+else
+    print("✗ Connexion échouée")
+end
+```
+
+**4. Activer le mode debug** : Ajoute ceci dans `irc_bot.lua` :
+```lua
+-- Dans init_database()
+function init_database()
+    print("DEBUG: Tentative de connexion PostgreSQL...")
+    -- ... reste du code
+    if not db_conn then
+        print("DEBUG: Échec de la connexion PostgreSQL")
+        return false
+    end
+    print("DEBUG: Connexion PostgreSQL réussie")
+    return true
+end
+```
+
+---
+
+### Problème : Les menus ne sont pas chargés depuis PostgreSQL
+
+**Solutions** :
+
+1. **Vérifier que les menus existent en base** :
+```bash
+psql -U irc_user -d irc_bot -c "SELECT * FROM custom_menus;"
+```
+
+2. **Vérifier la configuration** :
+```lua
+database = {
+    enabled = true,
+    menus_table = "custom_menus",  -- Vérifie que c'est le bon nom
+}
+```
+
+3. **Forcer le rechargement** : Redémarre le bot après avoir vérifié la base.
+
+---
+
 ## 📚 Voir aussi
 
 - [Installation](INSTALLATION.md)

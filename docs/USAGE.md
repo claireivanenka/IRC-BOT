@@ -41,6 +41,10 @@ make test
 | `!menu` | Affiche le menu complet | `!menu` |
 | `!menu boire` | Affiche les boissons | `!menu boire` |
 | `!menu manger` | Affiche la nourriture | `!menu manger` |
+| `!addmenu <nom> <texte>` | Crée un menu personnalisé | `!addmenu plat Soupe de légumes` |
+| `!listmenus` | Liste tous les menus personnalisés | `!listmenus` |
+| `!showmenu <nom>` | Affiche un menu personnalisé | `!showmenu plat` |
+| `!delmenu <nom>` | Supprime un menu personnalisé | `!delmenu plat` |
 | `!help` | Affiche l'aide | `!help` |
 
 ---
@@ -111,6 +115,65 @@ Dans IRC :
 
 Utilisation: !menu [boire|manger|tout]
 ```
+
+---
+
+## 📋 Menus personnalisés
+
+Le bot permet de créer, gérer et afficher des **menus personnalisés** avec horodatage automatique.
+
+### Commandes disponibles
+
+| Commande | Description | Exemple |
+|----------|-------------|---------|
+| `!addmenu <nom> <texte>` | Crée un nouveau menu personnalisé | `!addmenu plat_du_jour Soupe de légumes avec pain` |
+| `!listmenus` | Liste tous les menus personnalisés créés | `!listmenus` |
+| `!showmenu <nom>` | Affiche un menu personnalisé avec son horodatage | `!showmenu plat_du_jour` |
+| `!delmenu <nom>` | Supprime un menu personnalisé | `!delmenu plat_du_jour` |
+
+### Fonctionnalités
+
+- **Horodatage automatique** : Chaque menu est automatiquement daté lors de sa création
+- **Créateur identifié** : Le bot enregistre qui a créé le menu (avec le nick IRC)
+- **Sauvegarde persistante** : Les menus sont sauvegardés dans un fichier ou en base PostgreSQL (selon la configuration)
+- **Recherche insensible à la casse** : `!showmenu Plat` et `!showmenu plat` donnent le même résultat
+
+### Exemples d'utilisation
+
+**Créer un menu** :
+```irc
+<Alice> !addmenu dessert Tiramisu maison
+<Bot> Alice: ✅ Menu 'dessert' créé avec succès ! (2024-11-03 14:30:25)
+```
+
+**Lister les menus** :
+```irc
+<Alice> !listmenus
+<Bot> 📋 **Menus personnalisés** (2) : [1] plat_du_jour, [2] dessert
+```
+
+**Afficher un menu spécifique** :
+```irc
+<Alice> !showmenu dessert
+<Bot> [dessert] Tiramisu maison - Créé par Alice le 2024-11-03 14:30:25
+```
+
+**Supprimer un menu** :
+```irc
+<Alice> !delmenu dessert
+<Bot> Alice: ✅ Menu 'dessert' supprimé
+```
+
+### Sauvegarde des menus
+
+Les menus personnalisés peuvent être sauvegardés de deux manières :
+
+#### 1. Fichier local (par défaut)
+Les menus sont automatiquement sauvegardés dans `custom_menus.lua`.
+
+#### 2. Base de données PostgreSQL (optionnel)
+Si PostgreSQL est configuré et activé, les menus sont sauvegardés en base de données.
+Voir [Configuration PostgreSQL](CONFIGURATION.md#-configuration-postgresql) pour plus de détails.
 
 ---
 

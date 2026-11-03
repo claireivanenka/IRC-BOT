@@ -50,6 +50,22 @@ sudo apt install lua-sec
 lua -e "require('ssl')"
 ```
 
+### 4. Installer luasql.postgres (optionnel, pour PostgreSQL)
+
+Si tu veux utiliser la sauvegarde des menus en base de données PostgreSQL :
+
+```bash
+sudo apt install lua-sql-postgres
+
+# Vérifier
+lua -e "require('luasql.postgres'); print('luasql.postgres: OK')"
+```
+
+Ou avec LuaRocks :
+```bash
+luarocks install luasql-postgres
+```
+
 ### 4. Installer les outils de développement (optionnel)
 
 ```bash
