@@ -209,8 +209,8 @@ end
 
 -- Variables globales pour la connexion PostgreSQL
 local luasql = nil
-local db_env = nil
-local db_conn = nil
+db_env = nil
+db_conn = nil
 
 -- Initialiser la connexion PostgreSQL
 function init_database()
