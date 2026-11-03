@@ -1250,14 +1250,14 @@ function list_custom_menus(sort_by)
     end
     
     local count = #valid_menus
-    local output = "📋 **Menus personnalisés** (" .. count .. ") : "
+    local header = "📋 **Menus personnalisés** (" .. count .. ") :"
     local menu_list = {}
     for i, menu in ipairs(valid_menus) do
-        table.insert(menu_list, string.format("%d. **%s** *(par %s)* - %s", 
+        table.insert(menu_list, string.format("  %d. **%s** *(par %s)* - %s", 
             i, menu.name, menu.created_by or "inconnu", format_timestamp(menu.created_at or os.time())))
     end
-    output = output .. table.concat(menu_list, " | ")
-    return output
+    -- Retourner avec des sauts de ligne pour un affichage propre
+    return header .. "\n" .. table.concat(menu_list, "\n")
 end
 
 -- Afficher un menu personnalisé
@@ -1768,7 +1768,11 @@ function handle_message(msg)
         if sort_by and not string.find("date -date name -name creator -creator", sort_by, 1, true) then
             send_irc_message(target, nick .. ": ❌ Option de tri invalide. Utilisez: date, -date, name, -name, creator, -creator")
         else
-            send_irc_message(target, list_custom_menus(sort_by))
+            local result = list_custom_menus(sort_by)
+            -- Envoyer chaque ligne comme un message séparé
+            for line in result:gmatch("[^\n]+") do
+                send_irc_message(target, line)
+            end
         end
     end
     
