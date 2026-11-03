@@ -817,19 +817,17 @@ function list_cleaned_urls(limit)
         table.insert(recent_urls, urls[i])
     end
     
-    local output = "🔍 **URLs nettoyées** (" .. #urls .. " total, " .. #recent_urls .. " affichées) : "
+    local header = "🔍 **URLs nettoyées** (" .. #urls .. " total, " .. #recent_urls .. " affichées) :"
     local url_list = {}
     for i, url in ipairs(recent_urls) do
         local ts = format_timestamp(url.created_at)
-        local original_short = shorten_url(url.original_url, 25)
-        local cleaned_short = shorten_url(url.cleaned_url, 25)
+        local cleaned_short = shorten_url(url.cleaned_url, 60)
         local ip = url.ip_address or "N/A"
-        local domain = url.domain or "N/A"
-        table.insert(url_list, string.format("%d. %s→%s [IP:%s] (%s, %s)", 
-            i, original_short, cleaned_short, ip, url.cleaned_by, ts))
+        table.insert(url_list, string.format("  %d. %s [IP:%s] (%s, %s)", 
+            i, cleaned_short, ip, url.cleaned_by, ts))
     end
-    output = output .. table.concat(url_list, " | ")
-    return output
+    -- Envoyer le header puis chaque URL sur une ligne séparée
+    return header .. "\n" .. table.concat(url_list, "\n")
 end
 
 -- Lister les URLs nettoyées avec toutes les informations (format brut de la base)
