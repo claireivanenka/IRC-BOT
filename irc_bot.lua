@@ -662,13 +662,15 @@ function list_cleaned_urls_raw(limit)
         count_cursor:close()
     end
     
-    local output = "🗄️ **Contenu de la base PostgreSQL** (cleaned_urls, " .. total .. " entrées) :"
+    local output = "🗄️ **Contenu de la base PostgreSQL** (cleaned_urls, " .. total .. " entrées): "
     local i = 0
     while row do
         i = i + 1
         local ts = format_timestamp(tonumber(row.created_at) or os.time())
-        output = output .. string.format("\n%d. **ID:%s** | Original: %s | Nettoyée: %s | IP:%s | Par:%s | Date:%s",
-            i, row.id, row.original_url, row.cleaned_url, row.ip_address or 'N/A', row.cleaned_by, ts)
+        local orig_short = shorten_url(row.original_url, 40)
+        local cleaned_short = shorten_url(row.cleaned_url, 40)
+        output = output .. string.format("%d.[ID:%s,Orig:%s,Net:%s,IP:%s,Par:%s,Date:%s] ",
+            i, row.id, orig_short, cleaned_short, row.ip_address or 'N/A', row.cleaned_by, ts)
         row = cursor:fetch(row, 'a')
         if limit and i >= limit then break end
     end
