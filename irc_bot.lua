@@ -321,7 +321,11 @@ function create_cleaned_urls_table()
         {name = "created_at", type = "TIMESTAMP DEFAULT NOW()"},
         {name = "cleaned_by", type = "VARCHAR(255) NOT NULL DEFAULT 'unknown'"},
         {name = "ip_address", type = "VARCHAR(45)"},
-        {name = "domain", type = "VARCHAR(255)"}
+        {name = "domain", type = "VARCHAR(255)"},
+        {name = "country", type = "VARCHAR(100)"},
+        {name = "country_code", type = "VARCHAR(10)"},
+        {name = "city", type = "VARCHAR(100)"},
+        {name = "isp", type = "VARCHAR(255)"}
     }
     
     for _, col in ipairs(columns_to_add) do
@@ -687,7 +691,7 @@ function delete_custom_menu_from_pg(name)
 end
 
 -- Sauvegarder une URL nettoyée dans PostgreSQL
-function save_cleaned_url(original_url, cleaned_url, cleaned_by, ip_address, domain)
+function save_cleaned_url(original_url, cleaned_url, cleaned_by, ip_address, domain, geoip)
     log_message("DBG", "save_cleaned_url", "Called with url=" .. tostring(original_url) .. ", cleaned=" .. tostring(cleaned_url) .. ", by=" .. tostring(cleaned_by))
     if not db_conn then
         log_message("DBG", "save_cleaned_url", "db_conn is nil")
@@ -706,12 +710,26 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by, ip_address, dom
         ip_address = get_ip_address(domain)
     end
     
-    log_message("DBG", "save_cleaned_url", "domain=" .. (domain or "nil") .. ", ip=" .. (ip_address or "nil"))
+    -- Obtenir les informations GeoIP si non fournies
+    if not geoip and ip_address and ip_address ~= "N/A" then
+        geoip = get_geoip_info(ip_address)
+    end
     
-    -- Insérer l'URL nettoyée avec IP
+    -- Extraire les champs GeoIP
+    local country = geoip and geoip.country or ""
+    local country_code = geoip and geoip.countryCode or ""
+    local city = geoip and geoip.city or ""
+    local isp = geoip and geoip.isp or ""
+    
+    log_message("DBG", "save_cleaned_url", "domain=" .. (domain or "nil") .. ", ip=" .. (ip_address or "nil") .. 
+                ", geoip=" .. (geoip and "yes" or "no"))
+    
+    -- Insérer l'URL nettoyée avec IP et GeoIP
     local query = string.format(
-        "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address, domain) VALUES ('%s', '%s', NOW(), '%s', '%s', '%s')",
-        escape_sql(original_url), escape_sql(cleaned_url), escape_sql(cleaned_by), escape_sql(ip_address or "N/A"), escape_sql(domain or "N/A")
+        "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address, domain, country, country_code, city, isp) VALUES ('%s', '%s', NOW(), '%s', '%s', '%s', '%s', '%s', '%s', '%s')",
+        escape_sql(original_url), escape_sql(cleaned_url), escape_sql(cleaned_by), 
+        escape_sql(ip_address or "N/A"), escape_sql(domain or "N/A"),
+        escape_sql(country), escape_sql(country_code), escape_sql(city), escape_sql(isp)
     )
     log_message("DBG", "save_cleaned_url", "Query: " .. query)
     
@@ -725,10 +743,11 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by, ip_address, dom
     
     if not success then
         log_message("ERR", "save_cleaned_url", "First query failed: " .. tostring(result))
-        -- Essayer sans ON CONFLICT
+        -- Essayer sans GeoIP
         local query2 = string.format(
             "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address, domain) VALUES ('%s', '%s', NOW(), '%s', '%s', '%s')",
-            escape_sql(original_url), escape_sql(cleaned_url), escape_sql(cleaned_by), escape_sql(ip_address or "N/A"), escape_sql(domain or "N/A")
+            escape_sql(original_url), escape_sql(cleaned_url), escape_sql(cleaned_by), 
+            escape_sql(ip_address or "N/A"), escape_sql(domain or "N/A")
         )
         log_message("DBG", "save_cleaned_url", "Trying simple query: " .. query2)
         success, result = pcall(function()
@@ -758,7 +777,7 @@ function load_cleaned_urls()
     end
     
     local urls = {}
-    local query = "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address, domain FROM cleaned_urls ORDER BY created_at DESC"
+    local query = "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address, domain, country, country_code, city, isp FROM cleaned_urls ORDER BY created_at DESC"
     log_message("DBG", "load_cleaned_urls", "Executing query: " .. query)
     
     local cursor, err = db_conn:execute(query)
@@ -788,7 +807,11 @@ function load_cleaned_urls()
                 created_at = tonumber(row.created_at) or os.time(),
                 cleaned_by = row.cleaned_by,
                 ip_address = row.ip_address or "N/A",
-                domain = row.domain or "N/A"
+                domain = row.domain or "N/A",
+                country = row.country or "",
+                country_code = row.country_code or "",
+                city = row.city or "",
+                isp = row.isp or ""
             })
             log_message("DBG", "load_cleaned_urls", "Row " .. row_count .. ": " .. tostring(row.original_url))
             row = cursor:fetch(row, "a")
@@ -823,8 +846,12 @@ function list_cleaned_urls(limit)
         local ts = format_timestamp(url.created_at)
         local cleaned_short = shorten_url(url.cleaned_url, 60)
         local ip = url.ip_address or "N/A"
-        table.insert(url_list, string.format("  %d. %s [IP:%s] (%s, %s)", 
-            i, cleaned_short, ip, url.cleaned_by, ts))
+        local geoip_info = ""
+        if url.country and url.country ~= "" then
+            geoip_info = string.format(" (%s, %s)", url.country, url.city or "?")
+        end
+        table.insert(url_list, string.format("  %d. %s [IP:%s]%s (%s, %s)", 
+            i, cleaned_short, ip, geoip_info, url.cleaned_by, ts))
     end
     -- Envoyer le header puis chaque URL sur une ligne séparée
     return header .. "\n" .. table.concat(url_list, "\n")
@@ -1008,6 +1035,87 @@ function get_ip_address(domain)
     end)
     
     return ok and ip or "N/A"
+end
+
+-- Obtenir les informations GeoIP pour une adresse IP
+-- @param ip: adresse IP
+-- @return: table avec country, countryCode, city, regionName, isp, ou nil si erreur
+function get_geoip_info(ip)
+    if not ip or ip == "N/A" or ip == "127.0.0.1" then
+        return nil
+    end
+    
+    -- Vérifier si c'est une IP valide
+    if not ip:match("^%d+%.%d+%.%d+%.%d+$") then
+        return nil
+    end
+    
+    -- Essayer de charger socket.http
+    local http_ok, http = pcall(function() return require("socket.http") end)
+    local ltn12_ok, ltn12 = pcall(function() return require("ltn12") end)
+    
+    if not http_ok or not ltn12_ok then
+        log_message("DBG", "get_geoip_info", "socket.http or ltn12 not available")
+        return nil
+    end
+    
+    -- URL de l'API GeoIP (ip-api.com)
+    local api_url = "http://ip-api.com/json/" .. ip .. "?fields=status,message,country,countryCode,city,regionName,isp,org"
+    
+    local response_body = {}
+    local _, status_code, headers, status = http.request{
+        url = api_url,
+        sink = ltn12.sink.table(response_body),
+        timeout = 5
+    }
+    
+    if not status_code or status_code ~= 200 then
+        log_message("DBG", "get_geoip_info", "HTTP error: " .. tostring(status_code) .. " " .. tostring(status))
+        return nil
+    end
+    
+    local response = table.concat(response_body)
+    if not response or response == "" then
+        log_message("DBG", "get_geoip_info", "Empty response")
+        return nil
+    end
+    
+    -- Parser le JSON manuellement (sans dépendance cjson)
+    -- Format attendu: {"status":"success","country":"France","countryCode":"FR","city":"Paris",...}
+    local function parse_json_simple(json_str)
+        local result = {}
+        -- Extraire les valeurs simples (sans objets imbriqués)
+        for key, value in json_str:gmatch('"(%w+)":"([^"]*)"') do
+            result[key] = value
+        end
+        for key, value in json_str:gmatch('"(%w+)":(%d+)') do
+            result[key] = tonumber(value)
+        end
+        for key, value in json_str:gmatch('"(%w+)":(true)') do
+            result[key] = true
+        end
+        for key, value in json_str:gmatch('"(%w+)":(false)') do
+            result[key] = false
+        end
+        return result
+    end
+    
+    local data = parse_json_simple(response)
+    
+    if data.status ~= "success" then
+        log_message("DBG", "get_geoip_info", "API error: " .. tostring(data.message))
+        return nil
+    end
+    
+    -- Retourner les informations GeoIP
+    return {
+        country = data.country or "Unknown",
+        countryCode = data.countryCode or "??",
+        city = data.city or "Unknown",
+        regionName = data.regionName or "Unknown",
+        isp = data.isp or "Unknown",
+        org = data.org or "Unknown"
+    }
 end
 
 -- Sauvegarder une requête DNS dans PostgreSQL
@@ -1493,25 +1601,35 @@ function handle_message(msg)
             local ip = get_ip_address(domain)
             log_message("DBG", "!clean handler", "cleaned=" .. tostring(cleaned) .. ", domain=" .. tostring(domain) .. ", ip=" .. tostring(ip))
             
+            -- Obtenir les informations GeoIP (en arrière-plan, ne pas bloquer)
+            local geoip = get_geoip_info(ip)
+            local geoip_str = ""
+            if geoip then
+                geoip_str = string.format(" (%s, %s, %s)", 
+                    geoip.country or "?", 
+                    geoip.city or "?", 
+                    geoip.isp or "?")
+            end
+            
             -- Envoyer l'URL nettoyée sur plusieurs lignes si nécessaire
             -- Diviser en morceaux de 300 caractères pour éviter le wrapping forcé
             local max_len = 300
-            local full_msg = nick .. ": " .. cleaned .. " [IP: " .. ip .. "]"
+            local full_msg = nick .. ": " .. cleaned .. " [IP: " .. ip .. "]" .. geoip_str
             
             if #full_msg <= max_len then
                 -- Message court, envoyer tel quel
                 send_irc_message(target, full_msg)
             else
-                -- Message long, envoyer l'URL seule puis l'IP sur une autre ligne
+                -- Message long, envoyer l'URL seule puis l'IP et GeoIP sur une autre ligne
                 send_irc_message(target, nick .. ": " .. cleaned)
-                send_irc_message(target, "[IP: " .. ip .. "]")
+                send_irc_message(target, "[IP: " .. ip .. "]" .. geoip_str)
             end
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
             log_message("DBG", "!clean handler", "db_conn=" .. tostring(db_conn ~= nil))
             if config.database and config.database.enabled and db_conn then
                 log_message("DBG", "!clean handler", "Calling save_cleaned_url")
-                local save_success = save_cleaned_url(url, cleaned, nick, ip, domain)
+                local save_success = save_cleaned_url(url, cleaned, nick, ip, domain, geoip)
                 log_message("DBG", "!clean handler", "save_cleaned_url returned=" .. tostring(save_success))
             else
                 log_message("DBG", "!clean handler", "Skipping save_cleaned_url (db not enabled or not connected)")
