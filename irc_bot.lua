@@ -601,14 +601,16 @@ function load_cleaned_urls()
     end
     
     local urls = {}
-    local cursor = db_conn:execute(
-        "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address " ..
-        "FROM cleaned_urls ORDER BY created_at DESC"
-    )
+    local query = "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address FROM cleaned_urls ORDER BY created_at DESC"
+    log_message("DBG", "load_cleaned_urls", "Executing query: " .. query)
+    local cursor = db_conn:execute(query)
     
     if cursor then
+        log_message("DBG", "load_cleaned_urls", "cursor created successfully")
         local row = cursor:fetch({}, "a")
+        local row_count = 0
         while row do
+            row_count = row_count + 1
             table.insert(urls, {
                 original_url = row.original_url,
                 cleaned_url = row.cleaned_url,
@@ -616,9 +618,11 @@ function load_cleaned_urls()
                 cleaned_by = row.cleaned_by,
                 ip_address = row.ip_address or "N/A"
             })
+            log_message("DBG", "load_cleaned_urls", "Row " .. row_count .. ": " .. tostring(row.original_url))
             row = cursor:fetch(row, "a")
         end
         cursor:close()
+        log_message("DBG", "load_cleaned_urls", "Fetched " .. row_count .. " rows from cursor")
     else
         log_message("DBG", "load_cleaned_urls", "cursor is nil")
     end
@@ -1138,9 +1142,8 @@ end
 function parse_irc_message(line)
     if not line or line == "" then return nil end
     
-    -- Supprimer le 
-
-    line = line:gsub("\r", "")
+    -- Supprimer les caractères de contrôle \r et \n
+    line = line:gsub("\r", ""):gsub("\n", "")
     
     -- Vérifier les codes PING
     if line:match("^PING :(.+)") then
