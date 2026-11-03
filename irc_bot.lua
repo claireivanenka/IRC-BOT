@@ -261,9 +261,11 @@ function init_database()
     log_message("SYS", "Database", "Connecté à PostgreSQL")
     log_message("DBG", "init_database", "Connection successful, db_conn is valid")
     
-    -- Créer la table si elle n'existe pas
+    -- Créer les tables si elles n'existent pas
     log_message("DBG", "init_database", "Creating tables")
     create_menus_table()
+    create_cleaned_urls_table()
+    create_dns_queries_table()
     
     return true
 end
@@ -288,6 +290,52 @@ function create_menus_table()
         result:close()
     end
     print("✓ Table " .. config.database.menus_table .. " prête")
+end
+
+-- Créer la table des URLs nettoyées si elle n'existe pas
+function create_cleaned_urls_table()
+    if not db_conn then return end
+    
+    local result = db_conn:execute([[
+        CREATE TABLE IF NOT EXISTS cleaned_urls (
+            id SERIAL PRIMARY KEY,
+            original_url TEXT NOT NULL,
+            cleaned_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            cleaned_by VARCHAR(255) NOT NULL,
+            ip_address VARCHAR(45),
+            domain VARCHAR(255),
+            UNIQUE(original_url)
+        )
+    ]])
+    
+    if result and type(result) == "userdata" then
+        result:close()
+    end
+    print("✓ Table cleaned_urls prête")
+end
+
+-- Créer la table des requêtes DNS si elle n'existe pas
+function create_dns_queries_table()
+    if not db_conn then return end
+    
+    local result = db_conn:execute([[
+        CREATE TABLE IF NOT EXISTS dns_queries (
+            id SERIAL PRIMARY KEY,
+            domain VARCHAR(255) NOT NULL,
+            ip_address VARCHAR(45),
+            hostname VARCHAR(255),
+            resolved_at TIMESTAMP DEFAULT NOW(),
+            query_time INTERVAL,
+            status VARCHAR(50),
+            requested_by VARCHAR(255) NOT NULL
+        )
+    ]])
+    
+    if result and type(result) == "userdata" then
+        result:close()
+    end
+    print("✓ Table dns_queries prête")
 end
 
 -- Fermer la connexion PostgreSQL
@@ -612,7 +660,7 @@ function delete_custom_menu_from_pg(name)
 end
 
 -- Sauvegarder une URL nettoyée dans PostgreSQL
-function save_cleaned_url(original_url, cleaned_url, cleaned_by)
+function save_cleaned_url(original_url, cleaned_url, cleaned_by, ip_address, domain)
     log_message("DBG", "save_cleaned_url", "Called with url=" .. tostring(original_url) .. ", cleaned=" .. tostring(cleaned_url) .. ", by=" .. tostring(cleaned_by))
     if not db_conn then
         log_message("DBG", "save_cleaned_url", "db_conn is nil")
@@ -625,25 +673,28 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by)
         return (str or ""):gsub("'", "''")
     end
     
-    -- Extraire le domaine et obtenir l'IP
-    local domain = extract_domain(cleaned_url)
-    local ip = get_ip_address(domain)
+    -- Si IP ou domain n'est pas fourni, essayer de les obtenir
+    if not ip_address or ip_address == "N/A" then
+        domain = domain or extract_domain(cleaned_url)
+        ip_address = get_ip_address(domain)
+    end
     
-    log_message("DBG", "save_cleaned_url", "domain=" .. (domain or "nil") .. ", ip=" .. (ip or "nil"))
+    log_message("DBG", "save_cleaned_url", "domain=" .. (domain or "nil") .. ", ip=" .. (ip_address or "nil"))
     
     -- Insérer ou mettre à jour l'URL nettoyée avec IP
     -- Utilisation de INSERT ... ON CONFLICT pour PostgreSQL
     local success, result = pcall(function()
         local res = db_conn:execute(
-            "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address) VALUES (" ..
+            "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address, domain) VALUES (" ..
             "'" .. escape_sql(original_url) .. "', " ..
             "'" .. escape_sql(cleaned_url) .. "', " ..
-            "NOW(), '" .. escape_sql(cleaned_by) .. "', '" .. escape_sql(ip) .. "') " ..
+            "NOW(), '" .. escape_sql(cleaned_by) .. "', '" .. escape_sql(ip_address) .. "', '" .. escape_sql(domain) .. "') " ..
             "ON CONFLICT (original_url) DO UPDATE SET " ..
             "cleaned_url = EXCLUDED.cleaned_url, " ..
             "created_at = NOW(), " ..
             "cleaned_by = EXCLUDED.cleaned_by, " ..
-            "ip_address = EXCLUDED.ip_address"
+            "ip_address = EXCLUDED.ip_address, " ..
+            "domain = EXCLUDED.domain"
         )
         if res and type(res) == "userdata" then
             res:close()
@@ -669,7 +720,7 @@ function load_cleaned_urls()
     end
     
     local urls = {}
-    local query = "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address FROM cleaned_urls ORDER BY created_at DESC"
+    local query = "SELECT original_url, cleaned_url, EXTRACT(EPOCH FROM created_at) as created_at, cleaned_by, ip_address, domain FROM cleaned_urls ORDER BY created_at DESC"
     log_message("DBG", "load_cleaned_urls", "Executing query: " .. query)
     local cursor = db_conn:execute(query)
     
@@ -684,7 +735,8 @@ function load_cleaned_urls()
                 cleaned_url = row.cleaned_url,
                 created_at = tonumber(row.created_at) or os.time(),
                 cleaned_by = row.cleaned_by,
-                ip_address = row.ip_address or "N/A"
+                ip_address = row.ip_address or "N/A",
+                domain = row.domain or "N/A"
             })
             log_message("DBG", "load_cleaned_urls", "Row " .. row_count .. ": " .. tostring(row.original_url))
             row = cursor:fetch(row, "a")
@@ -713,15 +765,18 @@ function list_cleaned_urls(limit)
         table.insert(recent_urls, urls[i])
     end
     
-    local output = "🔍 **URLs nettoyées** (" .. #urls .. " total, " .. #recent_urls .. " affichées) :\n"
+    local output = "🔍 **URLs nettoyées** (" .. #urls .. " total, " .. #recent_urls .. " affichées) : "
+    local url_list = {}
     for i, url in ipairs(recent_urls) do
         local ts = format_timestamp(url.created_at)
-        local original_short = shorten_url(url.original_url, 35)
-        local cleaned_short = shorten_url(url.cleaned_url, 35)
+        local original_short = shorten_url(url.original_url, 25)
+        local cleaned_short = shorten_url(url.cleaned_url, 25)
         local ip = url.ip_address or "N/A"
-        output = output .. string.format("%d. **%s** → %s [IP:%s] *(par %s, %s)*\n", 
-            i, original_short, cleaned_short, ip, url.cleaned_by, ts)
+        local domain = url.domain or "N/A"
+        table.insert(url_list, string.format("%d. %s→%s [IP:%s] (%s, %s)", 
+            i, original_short, cleaned_short, ip, url.cleaned_by, ts))
     end
+    output = output .. table.concat(url_list, " | ")
     return output
 end
 
@@ -1273,15 +1328,21 @@ function handle_message(msg)
             local cleaned, domain = clean_youtube_url(url, nick)
             local ip = get_ip_address(domain)
             log_message("DBG", "!clean handler", "cleaned=" .. tostring(cleaned) .. ", domain=" .. tostring(domain) .. ", ip=" .. tostring(ip))
-            send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
             
-            -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
-            log_message("DBG", "!clean handler", "config.database.enabled=" .. tostring(config.database and config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
-            if config.database and config.database.enabled and db_conn then
-                log_message("DBG", "!clean handler", "Calling save_cleaned_url")
-                save_cleaned_url(url, cleaned, nick)
+            -- Vérifier si le nettoyage a réussi
+            if cleaned and not cleaned:match("⚠️") then
+                send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
+                
+                -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
+                log_message("DBG", "!clean handler", "config.database.enabled=" .. tostring(config.database and config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
+                if config.database and config.database.enabled and db_conn then
+                    log_message("DBG", "!clean handler", "Calling save_cleaned_url")
+                    save_cleaned_url(url, cleaned, nick, ip, domain)
+                else
+                    log_message("DBG", "!clean handler", "Skipping save_cleaned_url (db not enabled or not connected)")
+                end
             else
-                log_message("DBG", "!clean handler", "Skipping save_cleaned_url (db not enabled or not connected)")
+                send_irc_message(target, nick .. ": " .. (cleaned or "⚠️ URL invalide"))
             end
         end
     end
