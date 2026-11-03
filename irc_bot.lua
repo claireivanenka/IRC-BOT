@@ -1158,11 +1158,17 @@ function clean_youtube_url(url, requested_by)
         local query_string = cleaned_url:match("?(.+)") or ""
         
         if query_string ~= "" then
-            -- Liste des préfixes de paramètres de tracking à supprimer
+            -- Liste des préfixes et noms de paramètres de tracking à supprimer
             local tracking_params = {
+                -- Préfixes standards
                 "utm_", "gclid", "fbclid", "refer_", "srch_", "sprefix", 
                 "_x_", "session", "track", "click", "ad_", "campaign", 
-                "source", "medium", "term", "content", "adgroup"
+                "source", "medium", "term", "content", "adgroup",
+                -- Préfixes Temu et similaires
+                "freesia_", "_oak_", "_mp_", "_rec_", "page_", 
+                -- Paramètres spécifiques Temu
+                "scene", "gallery_order", "mp_inf", "rec_ext", "sessn",
+                "refer_page", "freesia_scene"
             }
             
             -- Séparer les paramètres et garder seulement ceux qui ne sont pas du tracking
@@ -1174,8 +1180,9 @@ function clean_youtube_url(url, requested_by)
                 if key then
                     local key_lower = key:lower()
                     -- Vérifier si le paramètre commence par un des préfixes de tracking
+                    -- ou correspond exactement à un nom de paramètre de tracking
                     for _, prefix in ipairs(tracking_params) do
-                        if key_lower:find(prefix:lower(), 1, true) == 1 then
+                        if key_lower:find(prefix:lower(), 1, true) == 1 or key_lower == prefix:lower() then
                             is_tracking = true
                             break
                         end
