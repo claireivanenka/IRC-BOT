@@ -296,23 +296,68 @@ end
 function create_cleaned_urls_table()
     if not db_conn then return end
     
-    local result = db_conn:execute([[
-        CREATE TABLE IF NOT EXISTS cleaned_urls (
-            id SERIAL PRIMARY KEY,
-            original_url TEXT NOT NULL,
-            cleaned_url TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT NOW(),
-            cleaned_by VARCHAR(255) NOT NULL,
-            ip_address VARCHAR(45),
-            domain VARCHAR(255),
-            UNIQUE(original_url)
-        )
-    ]])
-    
-    if result and type(result) == "userdata" then
-        result:close()
+    -- Vérifier si la table existe
+    local check_result = db_conn:execute("SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'cleaned_urls')")
+    local table_exists = false
+    if check_result then
+        local row = check_result:fetch({}, "a")
+        if row and row.exists == true then
+            table_exists = true
+        end
+        check_result:close()
     end
-    print("✓ Table cleaned_urls prête")
+    
+    if not table_exists then
+        -- Créer la table
+        local result = db_conn:execute([[
+            CREATE TABLE cleaned_urls (
+                id SERIAL PRIMARY KEY,
+                original_url TEXT NOT NULL,
+                cleaned_url TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                cleaned_by VARCHAR(255) NOT NULL,
+                ip_address VARCHAR(45),
+                domain VARCHAR(255),
+                UNIQUE(original_url)
+            )
+        ]])
+        if result and type(result) == "userdata" then
+            result:close()
+        end
+        print("✓ Table cleaned_urls créée")
+    else
+        -- Vérifier si les colonnes existent et les ajouter si nécessaire
+        local columns = {"original_url", "cleaned_url", "created_at", "cleaned_by", "ip_address", "domain"}
+        for _, col in ipairs(columns) do
+            local col_check = db_conn:execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'cleaned_urls' AND column_name = '" .. col .. "')")
+            if col_check then
+                local col_row = col_check:fetch({}, "a")
+                if col_row and col_row.exists == false then
+                    -- Ajouter la colonne manquante
+                    local alter_result
+                    if col == "original_url" then
+                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN original_url TEXT NOT NULL DEFAULT ''")
+                    elseif col == "cleaned_url" then
+                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN cleaned_url TEXT NOT NULL DEFAULT ''")
+                    elseif col == "created_at" then
+                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN created_at TIMESTAMP DEFAULT NOW()")
+                    elseif col == "cleaned_by" then
+                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN cleaned_by VARCHAR(255) NOT NULL DEFAULT 'unknown'")
+                    elseif col == "ip_address" then
+                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN ip_address VARCHAR(45)")
+                    elseif col == "domain" then
+                        alter_result = db_conn:execute("ALTER TABLE cleaned_urls ADD COLUMN domain VARCHAR(255)")
+                    end
+                    if alter_result and type(alter_result) == "userdata" then
+                        alter_result:close()
+                    end
+                    print("✓ Colonne " .. col .. " ajoutée à cleaned_urls")
+                end
+                col_check:close()
+            end
+        end
+        print("✓ Table cleaned_urls existe déjà")
+    end
 end
 
 -- Créer la table des requêtes DNS si elle n'existe pas
@@ -683,19 +728,15 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by, ip_address, dom
     
     -- Insérer ou mettre à jour l'URL nettoyée avec IP
     -- Utilisation de INSERT ... ON CONFLICT pour PostgreSQL
+    local query = string.format(
+        "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address, domain) VALUES ('%s', '%s', NOW(), '%s', '%s', '%s') " ..
+        "ON CONFLICT (original_url) DO UPDATE SET cleaned_url = EXCLUDED.cleaned_url, created_at = NOW(), cleaned_by = EXCLUDED.cleaned_by, ip_address = EXCLUDED.ip_address, domain = EXCLUDED.domain",
+        escape_sql(original_url), escape_sql(cleaned_url), escape_sql(cleaned_by), escape_sql(ip_address or "N/A"), escape_sql(domain or "N/A")
+    )
+    log_message("DBG", "save_cleaned_url", "Query: " .. query)
+    
     local success, result = pcall(function()
-        local res = db_conn:execute(
-            "INSERT INTO cleaned_urls (original_url, cleaned_url, created_at, cleaned_by, ip_address, domain) VALUES (" ..
-            "'" .. escape_sql(original_url) .. "', " ..
-            "'" .. escape_sql(cleaned_url) .. "', " ..
-            "NOW(), '" .. escape_sql(cleaned_by) .. "', '" .. escape_sql(ip_address) .. "', '" .. escape_sql(domain) .. "') " ..
-            "ON CONFLICT (original_url) DO UPDATE SET " ..
-            "cleaned_url = EXCLUDED.cleaned_url, " ..
-            "created_at = NOW(), " ..
-            "cleaned_by = EXCLUDED.cleaned_by, " ..
-            "ip_address = EXCLUDED.ip_address, " ..
-            "domain = EXCLUDED.domain"
-        )
+        local res = db_conn:execute(query)
         if res and type(res) == "userdata" then
             res:close()
         end
