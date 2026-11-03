@@ -254,12 +254,12 @@ end
 function save_custom_menus()
     local file = io.open(custom_menus_file, "w")
     if file then
-        -- Utiliser une sérialisation simple
+        -- Utiliser une sérialisation avec noms de champs pour éviter les problèmes
         local serialization = "{"
         for i, menu in ipairs(custom_menus) do
             if i > 1 then serialization = serialization .. "," end
             serialization = serialization .. string.format(
-                "\n    {%q, %q, %d, %q}",
+                "\n    {name=%q, content=%q, created_at=%d, created_by=%q}",
                 menu.name, menu.content, menu.created_at, menu.created_by
             )
         end
@@ -612,15 +612,25 @@ function handle_message(msg)
     -- =====================================================================
     
     -- Ajouter un menu personnalisé : !addmenu NomDuMenu Contenu du menu
-    if message:lower():match("^!addmenu %S+ .+") then
-        local _, _, name, content = message:find("^!addmenu (%S+) (.+)")
-        if name and content then
-            local menu, err = add_custom_menu(name, content, nick)
-            if menu then
-                local ts = format_timestamp(menu.created_at)
-                send_irc_message(target, nick .. ": ✅ Menu '" .. menu.name .. "' créé avec succès ! (" .. ts .. ")")
+    -- Gère les espaces dans le nom et le contenu
+    if message:lower():match("^!addmenu %S") then
+        -- Trouver le premier espace après !addmenu
+        local cmd, rest = message:match("^(.-) (.+)")
+        if cmd and rest then
+            -- Le nom est le premier mot après !addmenu, le reste est le contenu
+            local name = rest:match("^(%S+)")
+            local content = rest:match("^%S+ (.+)") or ""
+            
+            if name then
+                local menu, err = add_custom_menu(name, content, nick)
+                if menu then
+                    local ts = format_timestamp(menu.created_at)
+                    send_irc_message(target, nick .. ": ✅ Menu '" .. menu.name .. "' créé avec succès ! (" .. ts .. ")")
+                else
+                    send_irc_message(target, nick .. ": ❌ " .. err)
+                end
             else
-                send_irc_message(target, nick .. ": ❌ " .. err)
+                send_irc_message(target, nick .. ": ❌ Utilisation: !addmenu <nom> <texte>")
             end
         else
             send_irc_message(target, nick .. ": ❌ Utilisation: !addmenu <nom> <texte>")

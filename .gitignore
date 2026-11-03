@@ -5,6 +5,10 @@
 # Fichiers de configuration locale
 config_custom.lua
 
+# Fichiers de données
+custom_menus.dat
+*.dat
+
 # Fichiers de dépendances
 lua_modules/
 
