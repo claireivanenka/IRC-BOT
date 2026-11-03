@@ -858,9 +858,9 @@ function handle_message(msg)
         if cmd and rest then
             -- Le nom est le premier mot après !addmenu, le reste est le contenu
             local name = rest:match("^(%S+)")
-            local content = rest:match("^%S+ (.+)") or ""
+            local content = rest:match("^%S+ (.+)")
             
-            if name then
+            if name and content then
                 local menu, err = add_custom_menu(name, content, nick)
                 if menu then
                     local ts = format_timestamp(menu.created_at)
@@ -874,33 +874,31 @@ function handle_message(msg)
         else
             send_irc_message(target, nick .. ": ❌ Utilisation: !addmenu <nom> <texte>")
         end
+    elseif message:lower():match("^!addmenu$") then
+        send_irc_message(target, nick .. ": ❌ Utilisation: !addmenu <nom> <texte>")
     end
     
     -- Supprimer un menu : !delmenu NomDuMenu
-    if message:lower():match("^!delmenu %S+") then
-        local name = message:match("^!delmenu (%S+)")
-        if name then
-            local success, msg = delete_custom_menu(name)
-            send_irc_message(target, nick .. ": " .. (success and "✅ " or "❌ ") .. msg)
-        else
-            send_irc_message(target, nick .. ": ❌ Utilisation: !delmenu <nom>")
-        end
+    local delmenu_match = message:lower():match("^!delmenu (%S+)")
+    if delmenu_match then
+        local success, msg = delete_custom_menu(delmenu_match)
+        send_irc_message(target, nick .. ": " .. (success and "✅ " or "❌ ") .. msg)
+    elseif message:lower():match("^!delmenu$") then
+        send_irc_message(target, nick .. ": ❌ Utilisation: !delmenu <nom>")
     end
     
-    -- Lister les menus : !listmenus
-    if message:match("!listmenus") then
+    -- Lister les menus : !listmenus ou !listmenu (alias)
+    if message:lower():match("^!listmenus$") or message:lower():match("^!listmenu$") then
         send_irc_message(target, list_custom_menus())
     end
     
-    -- Afficher un menu : !showmenu NomDuMenu
-    if message:lower():match("^!showmenu %S+") then
-        local name = message:match("^!showmenu (%S+)")
-        if name then
-            local result = show_custom_menu(name)
-            send_irc_message(target, result)
-        else
-            send_irc_message(target, nick .. ": ❌ Utilisation: !showmenu <nom>")
-        end
+    -- Afficher un menu : !showmenu NomDuMenu ou !listmenu NomDuMenu (alias)
+    local showmenu_match = message:lower():match("^!showmenu (%S+)") or message:lower():match("^!listmenu (%S+)")
+    if showmenu_match then
+        local result = show_custom_menu(showmenu_match)
+        send_irc_message(target, result)
+    elseif message:lower():match("^!showmenu$") or message:lower():match("^!listmenu$") then
+        send_irc_message(target, nick .. ": ❌ Utilisation: !showmenu <nom> ou !listmenu <nom>")
     end
 end
 
