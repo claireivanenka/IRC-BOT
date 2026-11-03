@@ -1116,7 +1116,11 @@ function main()
                 if msg then
                     -- Logger les différents types de messages
                     if msg.type == "message" then
-                        handle_message(msg)
+                        local ok, err = pcall(handle_message, msg)
+                        if not ok then
+                            log_message("ERR", "handle_message", err)
+                            print("⚠️  Erreur dans handle_message: " .. err)
+                        end
                     elseif msg.type == "join" then
                         log_message("JOIN", msg.nick, "a rejoint " .. msg.channel)
                     elseif msg.type == "welcome" then
