@@ -917,10 +917,11 @@ function handle_message(msg)
         send_irc_message(target, nick .. ": 🏓 Pong ! Le bot est bien vivant ! ⏱️")
     end
     
-    -- Commande : date (exécute /exec -o date manuellement)
+    -- Commande : date (affiche la date et l'heure)
     if message:lower():match("^!date$") then
-        send_irc_message(config.channel, "/exec -o date")
-        log_message("CMD", nick, "a exécuté /exec -o date")
+        local current_date = os.date("%a %b %d %H:%M:%S %Y")
+        send_irc_message(target, "📅 Date: " .. current_date)
+        log_message("CMD", nick, "a demandé la date")
     end
     
     -- =====================================================================
