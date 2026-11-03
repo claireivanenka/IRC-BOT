@@ -1442,8 +1442,8 @@ function handle_message(msg)
     end
     
     -- Commande : nettoyer une URL YouTube
-    if message:match("!clean %S+") then
-        local url = message:match("!clean (%S+)")
+    if message:match("^!clean %S+") or message:match("^!clean$") then
+        local url = message:match("^!clean (%S+)")
         if url then
             log_message("DBG", "!clean handler", "Processing URL: " .. url)
             log_message("DBG", "!clean handler", "config.database.enabled=" .. tostring(config.database and config.database.enabled))
@@ -1459,9 +1459,14 @@ function handle_message(msg)
             log_message("DBG", "!clean handler", "cleaned=" .. tostring(cleaned) .. ", domain=" .. tostring(domain) .. ", ip=" .. tostring(ip))
             
             -- Toujours envoyer la réponse avec l'URL nettoyée et l'IP
-            -- Tronquer l'URL si elle est trop longue pour éviter les sauts de ligne
-            local display_url = shorten_url(cleaned, 80)
-            send_irc_message(target, nick .. ": " .. display_url .. " [IP: " .. ip .. "]")
+            -- Tronquer l'URL si elle est trop longue pour éviter les sauts de ligne dans Irssi
+            local display_url = shorten_url(cleaned, 60)
+            local message = nick .. ": " .. display_url .. " [IP: " .. ip .. "]"
+            -- Limiter le message entier à 400 caractères pour éviter le wrapping dans Irssi
+            if #message > 400 then
+                message = nick .. ": " .. shorten_url(cleaned, 300) .. " [IP: " .. ip .. "]"
+            end
+            send_irc_message(target, message)
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
             log_message("DBG", "!clean handler", "db_conn=" .. tostring(db_conn ~= nil))
@@ -1472,6 +1477,9 @@ function handle_message(msg)
             else
                 log_message("DBG", "!clean handler", "Skipping save_cleaned_url (db not enabled or not connected)")
             end
+        else
+            -- Aucune URL fournie
+            send_irc_message(target, nick .. ": ❌ Utilisation: !clean <url> (l'URL doit être sur la même ligne)")
         end
     end
     
