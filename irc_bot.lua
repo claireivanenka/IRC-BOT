@@ -780,16 +780,13 @@ function save_dns_query(domain, ip_address, requested_by)
     -- Résolution DNS
     local resolved_ip = ip_address or get_ip_address(domain)
     local end_time = os.time()
-    local query_time = end_time - start_time
+    local query_time_ms = end_time - start_time
     local status = resolved_ip ~= "N/A" and "SUCCESS" or "FAILED"
     
-    local query = string.format(
-        "INSERT INTO dns_queries (domain, ip_address, hostname, resolved_at, query_time, status, requested_by) VALUES ($1, $2, $3, NOW(), %d, $4, $5)",
-        query_time
-    )
+    local query = "INSERT INTO dns_queries (domain, ip_address, hostname, resolved_at, query_time, status, requested_by) VALUES ($1, $2, $3, NOW(), $4::interval, $5, $6)"
     
     local ok, err = pcall(function()
-        local res = assert(db:execute(query, domain, resolved_ip, hostname, status, requested_by))
+        local res = assert(db:execute(query, domain, resolved_ip, hostname, query_time_ms .. " milliseconds", status, requested_by))
         return res
     end)
     
