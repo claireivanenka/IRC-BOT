@@ -1459,7 +1459,9 @@ function handle_message(msg)
             log_message("DBG", "!clean handler", "cleaned=" .. tostring(cleaned) .. ", domain=" .. tostring(domain) .. ", ip=" .. tostring(ip))
             
             -- Toujours envoyer la réponse avec l'URL nettoyée et l'IP
-            send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
+            -- Tronquer l'URL si elle est trop longue pour éviter les sauts de ligne
+            local display_url = shorten_url(cleaned, 80)
+            send_irc_message(target, nick .. ": " .. display_url .. " [IP: " .. ip .. "]")
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
             log_message("DBG", "!clean handler", "db_conn=" .. tostring(db_conn ~= nil))
