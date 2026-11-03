@@ -218,6 +218,128 @@ local menu = {
 }
 
 -- =====================================================================
+-- MENUS PERSONNALISÉS AVEC HORODATAGE
+-- =====================================================================
+
+-- Table pour stocker les menus personnalisés
+-- Structure: {name = nom, content = contenu, created_at = timestamp, created_by = nick}
+local custom_menus = {}
+
+-- Fichier de sauvegarde des menus
+local custom_menus_file = "custom_menus.dat"
+
+-- Charger les menus personnalisés depuis le fichier
+function load_custom_menus()
+    local file = io.open(custom_menus_file, "r")
+    if not file then return end
+    
+    local content = file:read("*a")
+    file:close()
+    
+    if content and content ~= "" then
+        -- Utiliser loadstring avec un environnement sécurisé
+        local chunk = loadstring("return " .. content)
+        if chunk then
+            local ok, loaded_menus = pcall(chunk)
+            if ok and type(loaded_menus) == "table" then
+                custom_menus = loaded_menus
+                print("✓ " .. #custom_menus .. " menu(s) personnalisé(s) chargé(s) depuis " .. custom_menus_file)
+                log_message("SYS", "Menus", #custom_menus .. " menu(s) chargé(s)")
+            end
+        end
+    end
+end
+
+-- Sauvegarder les menus personnalisés dans un fichier
+function save_custom_menus()
+    local file = io.open(custom_menus_file, "w")
+    if file then
+        -- Utiliser une sérialisation simple
+        local serialization = "{"
+        for i, menu in ipairs(custom_menus) do
+            if i > 1 then serialization = serialization .. "," end
+            serialization = serialization .. string.format(
+                "\n    {%q, %q, %d, %q}",
+                menu.name, menu.content, menu.created_at, menu.created_by
+            )
+        end
+        serialization = serialization .. "\n}"
+        file:write(serialization)
+        file:close()
+        print("✓ " .. #custom_menus .. " menu(s) personnalisé(s) sauvegardé(s) dans " .. custom_menus_file)
+        log_message("SYS", "Menus", #custom_menus .. " menu(s) sauvegardé(s)")
+    else
+        print("⚠️ Impossible de sauvegarder les menus: " .. custom_menus_file)
+    end
+end
+
+-- Formater un timestamp en date lisible
+function format_timestamp(ts)
+    return os.date("%Y-%m-%d %H:%M:%S", ts or os.time())
+end
+
+-- Ajouter un menu personnalisé
+function add_custom_menu(name, content, creator)
+    -- Vérifier que le nom n'existe pas déjà
+    for _, menu in ipairs(custom_menus) do
+        if menu.name:lower() == name:lower() then
+            return nil, "Un menu avec ce nom existe déjà"
+        end
+    end
+    
+    local new_menu = {
+        name = name,
+        content = content,
+        created_at = os.time(),
+        created_by = creator or "inconnu"
+    }
+    
+    table.insert(custom_menus, new_menu)
+    save_custom_menus()  -- Sauvegarder après ajout
+    return new_menu, "Menu ajouté avec succès"
+end
+
+-- Supprimer un menu personnalisé
+function delete_custom_menu(name)
+    for i, menu in ipairs(custom_menus) do
+        if menu.name:lower() == name:lower() then
+            table.remove(custom_menus, i)
+            save_custom_menus()  -- Sauvegarder après suppression
+            return true, "Menu supprimé"
+        end
+    end
+    return false, "Menu non trouvé"
+end
+
+-- Lister tous les menus personnalisés
+function list_custom_menus()
+    if #custom_menus == 0 then
+        return "Aucun menu personnalisé n'a été créé."
+    end
+    
+    local count = #custom_menus
+    local output = "📋 **Menus personnalisés** (" .. count .. ") :\n"
+    for i, menu in ipairs(custom_menus) do
+        output = output .. string.format("%d. **%s** - Créé par %s le %s\n", 
+            i, menu.name, menu.created_by, format_timestamp(menu.created_at))
+    end
+    output = output .. "\nUtilisez !showmenu <nom> pour afficher un menu, !delmenu <nom> pour le supprimer"
+    return output
+end
+
+-- Afficher un menu personnalisé
+function show_custom_menu(name)
+    for _, menu in ipairs(custom_menus) do
+        if menu.name:lower() == name:lower() then
+            local timestamp = format_timestamp(menu.created_at)
+            return string.format("=== Menu: %s ===\nCréé par %s le %s\n\n%s", 
+                menu.name, menu.created_by, timestamp, menu.content)
+        end
+    end
+    return "❌ Menu non trouvé: " .. name
+end
+
+-- =====================================================================
 -- Fonctions utilitaires
 -- =====================================================================
 
@@ -471,7 +593,7 @@ function handle_message(msg)
         end
     end
     
-    -- Commande : menu
+    -- Commande : menu (menu par défaut)
     if message:match("!menu") then
         local category = message:match("!menu (%S+)") or "tout"
         send_irc_message(target, show_menu(category))
@@ -479,8 +601,57 @@ function handle_message(msg)
     
     -- Commande : aide
     if message:match("!help") or message:match("!aide") then
-        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !menu [boire|manger] - afficher le menu | !help - afficher cette aide"
+        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !menu [boire|manger] - afficher le menu | " ..
+                         "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
+                         "!listmenus - lister les menus | !showmenu <nom> - afficher un menu | !help - aide"
         send_irc_message(target, help_text)
+    end
+    
+    -- =====================================================================
+    -- COMMANDES DE GESTION DES MENUS PERSONNALISÉS
+    -- =====================================================================
+    
+    -- Ajouter un menu personnalisé : !addmenu NomDuMenu Contenu du menu
+    if message:lower():match("^!addmenu %S+ .+") then
+        local _, _, name, content = message:find("^!addmenu (%S+) (.+)")
+        if name and content then
+            local menu, err = add_custom_menu(name, content, nick)
+            if menu then
+                local ts = format_timestamp(menu.created_at)
+                send_irc_message(target, nick .. ": ✅ Menu '" .. menu.name .. "' créé avec succès ! (" .. ts .. ")")
+            else
+                send_irc_message(target, nick .. ": ❌ " .. err)
+            end
+        else
+            send_irc_message(target, nick .. ": ❌ Utilisation: !addmenu <nom> <texte>")
+        end
+    end
+    
+    -- Supprimer un menu : !delmenu NomDuMenu
+    if message:lower():match("^!delmenu %S+") then
+        local name = message:match("^!delmenu (%S+)")
+        if name then
+            local success, msg = delete_custom_menu(name)
+            send_irc_message(target, nick .. ": " .. (success and "✅ " or "❌ ") .. msg)
+        else
+            send_irc_message(target, nick .. ": ❌ Utilisation: !delmenu <nom>")
+        end
+    end
+    
+    -- Lister les menus : !listmenus
+    if message:match("!listmenus") then
+        send_irc_message(target, list_custom_menus())
+    end
+    
+    -- Afficher un menu : !showmenu NomDuMenu
+    if message:lower():match("^!showmenu %S+") then
+        local name = message:match("^!showmenu (%S+)")
+        if name then
+            local result = show_custom_menu(name)
+            send_irc_message(target, result)
+        else
+            send_irc_message(target, nick .. ": ❌ Utilisation: !showmenu <nom>")
+        end
     end
 end
 
@@ -507,6 +678,9 @@ function main()
     -- Initialiser le logging
     init_logging()
     log_message("SYS", "Bot", "Démarrage du bot IRC")
+    
+    -- Charger les menus personnalisés sauvegardés
+    load_custom_menus()
     
     -- Se connecter
     if not connect_irc() then
@@ -621,12 +795,14 @@ function main()
     
     -- Fin de la boucle, déconnexion
     log_message("SYS", "Bot", "Fin de la boucle principale")
+    save_custom_menus()  -- Sauvegarder les menus avant de quitter
 end
 
 -- Gestion des erreurs
 function handle_error(err)
     print("Erreur: " .. err)
     log_message("ERR", "System", err)
+    save_custom_menus()  -- Sauvegarder les menus avant de quitter
     disconnect()
     close_logging()
     os.exit(1)
