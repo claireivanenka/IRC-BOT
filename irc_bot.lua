@@ -919,7 +919,7 @@ if config.use_ssl then
     ssl = require("ssl")
 end
 
-local irc_socket = nil
+irc_socket = nil
 local connected = false
 local last_hour = nil
 
