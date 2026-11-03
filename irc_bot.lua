@@ -531,7 +531,12 @@ end
 
 -- Sauvegarder une URL nettoyée dans PostgreSQL
 function save_cleaned_url(original_url, cleaned_url, cleaned_by)
-    if not db_conn then return false end
+    if not db_conn then
+        log_message("[DBG] save_cleaned_url: db_conn is nil")
+        return false
+    end
+    
+    log_message("[DBG] save_cleaned_url: Attempting to save URL: " .. (original_url or "nil"))
     
     local function escape_sql(str)
         return (str or ""):gsub("'", "''")
@@ -540,6 +545,8 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by)
     -- Extraire le domaine et obtenir l'IP
     local domain = extract_domain(cleaned_url)
     local ip = get_ip_address(domain)
+    
+    log_message("[DBG] save_cleaned_url: domain=" .. (domain or "nil") .. ", ip=" .. (ip or "nil"))
     
     -- Insérer ou mettre à jour l'URL nettoyée avec IP
     -- Utilisation de INSERT ... ON CONFLICT pour PostgreSQL
@@ -560,6 +567,12 @@ function save_cleaned_url(original_url, cleaned_url, cleaned_by)
         end
         return true
     end)
+    
+    if success then
+        log_message("[DBG] save_cleaned_url: SUCCESS")
+    else
+        log_message("[DBG] save_cleaned_url: FAILED - " .. tostring(result))
+    end
     
     return success or false
 end
@@ -1178,8 +1191,12 @@ function handle_message(msg)
             send_irc_message(target, nick .. ": " .. cleaned .. " [IP: " .. ip .. "]")
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
+            log_message("[DBG] !clean handler: config.database.enabled=" .. tostring(config.database.enabled) .. ", db_conn=" .. tostring(db_conn ~= nil))
             if config.database and config.database.enabled and db_conn then
+                log_message("[DBG] !clean handler: Calling save_cleaned_url")
                 save_cleaned_url(url, cleaned, nick)
+            else
+                log_message("[DBG] !clean handler: Skipping save_cleaned_url (db not enabled or not connected)")
             end
         end
     end
