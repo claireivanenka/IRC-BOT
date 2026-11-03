@@ -756,15 +756,56 @@ end
 
 ### Fonctionnalités possibles
 
-| Priorité | Fonctionnalité | Description |
-|----------|----------------|-------------|
-| ⭐⭐⭐ | Système de plugins | Charger des fonctionnalités dynamiquement |
-| ⭐⭐⭐ | Base de données | Stocker les préférences des utilisateurs |
-| ⭐⭐ | Interface Web | Contrôler le bot via une interface web |
-| ⭐⭐ | Commandes vocales | Intégration avec Discord/Slack |
-| ⭐ | IA | Réponses intelligentes avec LLM |
-| ⭐ | Statistiques | Suivre l'utilisation du bot |
-| ⭐ | Modération | Fonctionnalités de modération de channel |
+| Priorité | Fonctionnalité | Description | Statut |
+|----------|----------------|-------------|--------|
+| ⭐⭐⭐ | Système de plugins | Charger des fonctionnalités dynamiquement | ⬜ |
+| ⭐⭐⭐ | Base de données | Stocker les préférences des utilisateurs | ⬜ |
+| ⭐⭐⭐ | **Historique URLs** | ✅ Implémenté - Stocker les URLs nettoyées avec IPs | ✅ |
+| ⭐⭐ | Interface Web | Contrôler le bot via une interface web | ⬜ |
+| ⭐⭐ | Commandes vocales | Intégration avec Discord/Slack | ⬜ |
+| ⭐⭐ | **Résolution DNS** | ✅ Implémenté - Afficher les IPs des URLs | ✅ |
+| ⭐ | IA | Réponses intelligentes avec LLM | ⬜ |
+| ⭐ | Statistiques | Suivre l'utilisation du bot | ⬜ |
+| ⭐ | Modération | Fonctionnalités de modération de channel | ⬜ |
+
+### ✅ Fonctionnalités implémentées
+
+Le bot inclut maintenant :
+- **Résolution DNS automatique** : Chaque URL nettoyée affiche son adresse IP
+- **Stockage PostgreSQL** : Les URLs nettoyées sont sauvegardées avec leur IP
+- **Historique consultable** : Commandes `!urls` et `!lasturls` pour lister les URLs
+
+### 🔧 Fonctions réseau disponibles
+
+Le bot utilise maintenant les fonctions suivantes pour la résolution DNS :
+
+```lua
+-- Extraire le domaine d'une URL
+function extract_domain(url)
+    -- Retourne : www.youtube.com
+end
+
+-- Résoudre un domaine en adresse IP
+function get_ip_address(domain)
+    -- Retourne : 142.250.186.46
+    -- Utilise : socket.dns.toip()
+end
+```
+
+Exemple d'utilisation dans une nouvelle fonctionnalité :
+```lua
+function check_url_safety(url)
+    local domain = extract_domain(url)
+    local ip = get_ip_address(domain)
+    
+    -- Vérifier si l'IP est dans une blacklist
+    if is_blacklisted(ip) then
+        return false, "IP blacklistée: " .. ip
+    end
+    
+    return true, "URL sûre (IP: " .. ip .. ")"
+end
+```
 
 ### Contributions bienvenues
 

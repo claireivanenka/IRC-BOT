@@ -61,11 +61,13 @@ lua irc_bot.lua
 
 | Fonctionnalité | Commande | Description |
 |----------------|----------|-------------|
-| 🧹 Nettoyage YouTube | `!clean <url>` | Supprime les trackers des URLs YouTube |
+| 🧹 Nettoyage YouTube | `!clean <url>` | Supprime les trackers et **affiche l'IP** des URLs YouTube |
+| 🔍 Historique URLs | `!urls [N]`, `!lasturls [N]` | Liste les URLs nettoyées avec leurs IPs |
 | 🍽️ Menu interactif | `!menu [boire\|manger]` | Affiche un menu de boissons et nourriture |
 | 📋 Menus personnalisés | `!addmenu`, `!delmenu`, `!listmenus` | Crée et gère des menus personnalisés avec horodatage |
-| 🗄️ Sauvegarde PostgreSQL | Automatique | Sauvegarde des menus dans une base PostgreSQL |
+| 🗄️ Sauvegarde PostgreSQL | Automatique | Sauvegarde des menus et URLs dans une base PostgreSQL |
 | ⏰ Date horaire | Automatique | Exécute `/exec -o date` chaque heure ronde |
+| 📊 Affichage IP | Automatique | Affiche l'adresse IP de chaque domaine YouTube |
 | 📚 Documentation | `!help` | Affiche l'aide |
 
 ---
@@ -134,6 +136,9 @@ Si tu trouves un bug ou veux ajouter une fonctionnalité :
 
 | Version | Date | Modifications |
 |---------|------|---------------|
+| 1.3.0 | 2026-11-03 | Ajout affichage IP des URLs, commandes !urls et !lasturls, stockées dans PostgreSQL |
+| 1.2.0 | 2026-11-03 | Ajout sauvegarde PostgreSQL pour les menus personnalisés |
+| 1.1.0 | 2026-11-03 | Menus personnalisés avec horodatage, itération automatique |
 | 1.0.0 | 2024-11-02 | Version initiale avec nettoyage YouTube, menu et date horaire |
 
 *(Voir [CHANGELOG.md](../CHANGELOG.md) pour plus de détails)*

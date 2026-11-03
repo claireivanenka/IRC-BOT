@@ -697,6 +697,58 @@ database = {
 
 ---
 
+## 🌐 Problèmes de résolution DNS
+
+### Les IPs ne s'affichent pas ou affichent "N/A"
+
+**Symptômes** :
+- `!clean` affiche `[IP: N/A]`
+- `!urls` affiche `[IP: N/A]` pour toutes les URLs
+
+**Causes possibles** :
+1. Problème de connexion Internet
+2. DNS non configuré
+3. Firewall bloquant les requêtes DNS
+4. Problème avec lua-socket
+
+**Solutions** :
+
+**1. Tester la résolution DNS manuellement** :
+```bash
+# Tester avec Lua
+dua -e "local socket = require('socket'); print(socket.dns.toip('youtube.com'))"
+```
+
+**2. Tester la résolution DNS système** :
+```bash
+nslookup youtube.com
+dig youtube.com
+ping youtube.com
+```
+
+**3. Tester la connexion Internet** :
+```bash
+ping 8.8.8.8
+curl -I https://youtube.com
+```
+
+**4. Vérifier lua-socket** :
+```bash
+lua -e "require('socket'); print('lua-socket: OK')"
+```
+
+**5. Problème de permissions** :
+Certains réseaux bloquent les requêtes DNS. Essayez :
+```bash
+# Tester depuis le bot
+# Si ça fonctionne en CLI mais pas dans le bot, vérifiez les permissions
+```
+
+**6. Utiliser un serveur DNS alternatif** :
+Si votre DNS local a des problèmes, vous pouvez configurer le bot pour utiliser un serveur DNS spécifique en modifiant `/etc/resolv.conf` ou en utilisant un proxy.
+
+---
+
 ## 🆘 Besoin d'aide supplémentaire ?
 
 Si tu rencontres un problème qui n'est pas dans cette liste :

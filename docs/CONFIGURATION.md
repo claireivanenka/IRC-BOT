@@ -316,9 +316,9 @@ end
 
 ## 🗄️ Configuration PostgreSQL
 
-### Activer la sauvegarde des menus en base de données
+### Activer la sauvegarde en base de données
 
-Le bot peut sauvegarder les menus personnalisés dans une base de données PostgreSQL au lieu d'un fichier local.
+Le bot peut sauvegarder **les menus personnalisés** et **les URLs YouTube nettoyées** dans une base de données PostgreSQL au lieu d'un fichier local.
 
 #### Configuration minimale
 
@@ -327,13 +327,14 @@ return {
     -- ... autres configurations ...
     
     database = {
-        enabled = true,          -- Activer PostgreSQL
-        host = "localhost",      -- Adresse du serveur
-        port = 5432,             -- Port PostgreSQL
-        database = "irc_bot",    -- Nom de la base
-        user = "irc_user",       -- Utilisateur
-        password = "motdepasse",-- Mot de passe
-        menus_table = "custom_menus", -- Table pour les menus
+        enabled = true,            -- Activer PostgreSQL
+        host = "localhost",        -- Adresse du serveur
+        port = 5432,               -- Port PostgreSQL
+        database = "irc_bot",      -- Nom de la base
+        user = "irc_user",         -- Utilisateur
+        password = "motdepasse",  -- Mot de passe
+        menus_table = "custom_menus",  -- Table pour les menus
+        -- Le bot utilise aussi la table 'cleaned_urls' pour les URLs nettoyées
     }
 }
 ```
@@ -348,7 +349,9 @@ return {
 | `database` | string | Nom de la base de données | `irc_bot` |
 | `user` | string | Nom d'utilisateur | `irc_user` |
 | `password` | string | Mot de passe | `irc_password` |
-| `menus_table` | string | Nom de la table pour les menus | `custom_menus` |
+| `menus_table` | string | Nom de la table pour les menus personnalisés | `custom_menus` |
+
+> ⚠️ **Note** : Le bot utilise également la table `cleaned_urls` pour stocker les URLs YouTube nettoyées. Cette table est créée automatiquement ou peut être créée manuellement avec le schéma fourni dans `docs/cleaned_urls_schema.sql`.
 
 ### Installation de PostgreSQL
 
@@ -371,14 +374,34 @@ sudo apt install postgresql postgresql-contrib
    sudo -u postgres createdb -O irc_user irc_bot
    ```
 
-3. Connecte-toi à la base et crée la table :
+3. Connecte-toi à la base et crée les tables :
+   
+   **Option 1** : Exécute les schémas SQL fournis
+   ```bash
+   psql -U irc_user -d irc_bot -f docs/database_schema.sql
+   psql -U irc_user -d irc_bot -f docs/cleaned_urls_schema.sql
+   ```
+   
+   **Option 2** : Crée les tables manuellement
    ```sql
+   -- Table pour les menus personnalisés
    CREATE TABLE custom_menus (
        id SERIAL PRIMARY KEY,
        name VARCHAR(100) NOT NULL UNIQUE,
        content TEXT NOT NULL,
        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
        created_by VARCHAR(100) NOT NULL
+   );
+   
+   -- Table pour les URLs nettoyées
+   CREATE TABLE cleaned_urls (
+       id SERIAL PRIMARY KEY,
+       original_url TEXT NOT NULL,
+       cleaned_url TEXT NOT NULL,
+       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+       cleaned_by VARCHAR(100) NOT NULL,
+       ip_address VARCHAR(45),
+       UNIQUE(original_url)
    );
    ```
 
@@ -417,12 +440,19 @@ luarocks install luasql-postgres
 ### Dépannage
 
 - **Erreur de connexion** : Vérifie que PostgreSQL est en cours d'exécution et que les identifiants sont corrects.
-- **Table manquante** : Le bot essaye de créer la table automatiquement au premier démarrage.
+- **Table manquante** : Le bot essaye de créer les tables automatiquement au premier démarrage. Sinon, exécute les schémas manuellement.
 - **Permissions** : Assure-toi que l'utilisateur a les droits sur la base de données.
+- **Colonne manquante** : Si tu as une ancienne version, exécute `ALTER TABLE cleaned_urls ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45);`
 
 ### Fallback automatique
 
-Si PostgreSQL n'est pas disponible (connexion échouée), le bot basculera automatiquement sur le système de sauvegarde par fichier local sans interrupion.
+Si PostgreSQL n'est pas disponible (connexion échouée), le bot basculera automatiquement sur le système de sauvegarde par fichier local pour les menus personnalisés. Les URLs nettoyées ne seront pas sauvegardées mais le bot continuera de fonctionner.
+
+### Structure des tables
+
+Pour plus de détails sur les schémas, consulte :
+- `docs/database_schema.sql` - Schéma pour les menus personnalisés
+- `docs/cleaned_urls_schema.sql` - Schéma pour les URLs nettoyées
 
 ---
 

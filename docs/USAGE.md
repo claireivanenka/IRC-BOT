@@ -99,7 +99,7 @@ Le bot peut stocker les URLs nettoyées dans PostgreSQL (si activé). Chaque ent
 ```irc
 <Toi> !urls 5
 <Bot> 🔍 URLs nettoyées (25 total, 5 affichées) :
-       1. https://youtu.be/def456 → https://youtu... (par alice, 2026-11-03 20:18:00)
+       1. https://youtu.be/def456 → https://youtu... [IP:142.250.186.46] *(par alice, 2026-11-03 20:18:00)
        ...
 ```
 
@@ -107,7 +107,8 @@ Le bot peut stocker les URLs nettoyées dans PostgreSQL (si activé). Chaque ent
 ```irc
 <Toi> !lasturls
 <Bot> 🔍 URLs nettoyées (25 total, 5 affichées) :
-       1. https://youtu.be/def456 → https://youtu... (par alice, 2026-11-03 20:18:00)
+       1. https://youtu.be/def456 → https://youtu... [IP:142.250.186.46] *(par alice, 2026-11-03 20:18:00)
+       2. https://youtu.be/ghi789 → https://youtu... [IP:142.250.186.46] *(par bob, 2026-11-03 20:17:00)
        ...
 ```
 
