@@ -541,15 +541,28 @@ end
 
 -- Ajouter un menu personnalisé
 function add_custom_menu(name, content, creator)
-    -- Vérifier que le nom n'existe pas déjà
+    -- Vérifier que le nom n'existe pas déjà et générer un nom unique si nécessaire
+    local final_name = name
+    local iteration = 1
+    
+    -- Trouver si le nom existe déjà et quel est le plus haut numéro d'itération
     for _, menu in ipairs(custom_menus) do
         if menu.name:lower() == name:lower() then
-            return nil, "Un menu avec ce nom existe déjà"
+            -- Nom existe déjà, trouver un nom unique avec itération
+            iteration = iteration + 1
+            final_name = name .. "_" .. iteration
+            -- Vérifier si ce nouveau nom existe aussi (peu probable mais possible)
+            for _, m in ipairs(custom_menus) do
+                if m.name:lower() == final_name:lower() then
+                    iteration = iteration + 1
+                    final_name = name .. "_" .. iteration
+                end
+            end
         end
     end
     
     local new_menu = {
-        name = name,
+        name = final_name,
         content = content,
         created_at = os.time(),
         created_by = creator or "inconnu"
