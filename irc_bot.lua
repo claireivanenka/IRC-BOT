@@ -494,19 +494,37 @@ function save_custom_menu_to_pg(menu)
     return true
 end
 
--- Charger les menus depuis PostgreSQL
-function load_custom_menus_from_pg()
-    if not db_conn then return end
+-- Charger les menus depuis PostgreSQL avec tri personnalisé
+-- @param sort_by: nil (défaut: date DESC), "date", "-date" (ascendant), "name", "-name", "creator", "-creator"
+function load_custom_menus_sorted(sort_by)
+    if not db_conn then return {} end
     
+    local order_by = "created_at DESC" -- Tri par défaut: du plus récent au plus ancien
+    
+    if sort_by == "date" or sort_by == nil then
+        order_by = "created_at DESC"
+    elseif sort_by == "-date" then
+        order_by = "created_at ASC"
+    elseif sort_by == "name" then
+        order_by = "name ASC"
+    elseif sort_by == "-name" then
+        order_by = "name DESC"
+    elseif sort_by == "creator" then
+        order_by = "created_by ASC, created_at DESC"
+    elseif sort_by == "-creator" then
+        order_by = "created_by DESC, created_at DESC"
+    end
+    
+    local menus = {}
     local cursor = db_conn:execute(
         "SELECT name, content, EXTRACT(EPOCH FROM created_at) as created_at, created_by " ..
-        "FROM " .. config.database.menus_table .. " ORDER BY created_at DESC"
+        "FROM " .. config.database.menus_table .. " ORDER BY " .. order_by
     )
     
     if cursor then
         local row = cursor:fetch({}, "a")
         while row do
-            table.insert(custom_menus, {
+            table.insert(menus, {
                 name = row.name,
                 content = row.content,
                 created_at = tonumber(row.created_at) or os.time(),
@@ -515,9 +533,59 @@ function load_custom_menus_from_pg()
             row = cursor:fetch(row, "a")
         end
         cursor:close()
-        print("✓ " .. #custom_menus .. " menu(s) chargé(s) depuis PostgreSQL")
-        log_message("SYS", "Menus", #custom_menus .. " menu(s) chargé(s) depuis PostgreSQL")
     end
+    
+    return menus
+end
+
+-- Fonction utilitaire pour trier une table de menus
+-- @param menus: table de menus à trier
+-- @param sort_by: "date", "-date", "name", "-name", "creator", "-creator"
+function sort_menus(menus, sort_by)
+    if not sort_by or sort_by == "date" then
+        table.sort(menus, function(a, b)
+            return (a.created_at or 0) > (b.created_at or 0)
+        end)
+    elseif sort_by == "-date" then
+        table.sort(menus, function(a, b)
+            return (a.created_at or 0) < (b.created_at or 0)
+        end)
+    elseif sort_by == "name" then
+        table.sort(menus, function(a, b)
+            return (a.name or ""):lower() < (b.name or ""):lower()
+        end)
+    elseif sort_by == "-name" then
+        table.sort(menus, function(a, b)
+            return (a.name or ""):lower() > (b.name or ""):lower()
+        end)
+    elseif sort_by == "creator" then
+        table.sort(menus, function(a, b)
+            local a_creator = (a.created_by or ""):lower()
+            local b_creator = (b.created_by or ""):lower()
+            if a_creator == b_creator then
+                return (a.created_at or 0) > (b.created_at or 0)
+            end
+            return a_creator < b_creator
+        end)
+    elseif sort_by == "-creator" then
+        table.sort(menus, function(a, b)
+            local a_creator = (a.created_by or ""):lower()
+            local b_creator = (b.created_by or ""):lower()
+            if a_creator == b_creator then
+                return (a.created_at or 0) > (b.created_at or 0)
+            end
+            return a_creator > b_creator
+        end)
+    end
+    return menus
+end
+
+-- Charger les menus depuis PostgreSQL (pour compatibilité, tri par date DESC)
+function load_custom_menus_from_pg()
+    local menus = load_custom_menus_sorted("date")
+    custom_menus = menus
+    print("✓ " .. #custom_menus .. " menu(s) chargé(s) depuis PostgreSQL")
+    log_message("SYS", "Menus", #custom_menus .. " menu(s) chargé(s) depuis PostgreSQL")
 end
 
 -- Supprimer un menu de PostgreSQL
@@ -899,9 +967,12 @@ end
 -- Lister tous les menus personnalisés
 -- @param sort_by: nil (par défaut, ordre d'insertion), "date" (du plus récent au plus ancien), "name" (alphabétique), "creator" (par créateur)
 function list_custom_menus(sort_by)
+    -- Charger les menus depuis PostgreSQL avec le tri demandé
+    local menus = load_custom_menus_sorted(sort_by)
+    
     -- Filtrer les menus sans nom (pour éviter les entrées corrompues)
     local valid_menus = {}
-    for _, menu in ipairs(custom_menus) do
+    for _, menu in ipairs(menus) do
         if menu.name and menu.name ~= "" then
             table.insert(valid_menus, menu)
         end
@@ -909,21 +980,6 @@ function list_custom_menus(sort_by)
     
     if #valid_menus == 0 then
         return "Aucun menu personnalisé n'a été créé."
-    end
-    
-    -- Trier selon le paramètre
-    if sort_by == "date" then
-        table.sort(valid_menus, function(a, b)
-            return (a.created_at or 0) > (b.created_at or 0)  -- Plus récent en premier
-        end)
-    elseif sort_by == "name" then
-        table.sort(valid_menus, function(a, b)
-            return a.name:lower() < b.name:lower()
-        end)
-    elseif sort_by == "creator" then
-        table.sort(valid_menus, function(a, b)
-            return (a.created_by or ""):lower() < (b.created_by or ""):lower()
-        end)
     end
     
     local count = #valid_menus
@@ -1266,7 +1322,7 @@ function handle_message(msg)
     if message:match("!help") or message:match("!aide") then
         local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
-                         "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
+                         "!listmenus [date|-date|name|-name|creator|-creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)
     end
     
@@ -1323,7 +1379,7 @@ function handle_message(msg)
         send_irc_message(target, nick .. ": ❌ Utilisation: !delmenu <nom>")
     end
     
-    -- Lister les menus : !listmenus [date|name|creator] ou !listmenu [date|name|creator]
+    -- Lister les menus : !listmenus [date|-date|name|-name|creator|-creator] ou !listmenu [date|-date|name|-name|creator|-creator]
     local list_match = message:lower():match("^!listmenus(%s*)")
     local listmenu_match = message:lower():match("^!listmenu(%s*)")
     if list_match or listmenu_match then
@@ -1333,7 +1389,12 @@ function handle_message(msg)
         elseif listmenu_match ~= "" then
             sort_by = listmenu_match:match("^%s+(%S+)")
         end
-        send_irc_message(target, list_custom_menus(sort_by))
+        -- Vérifier que sort_by est valide
+        if sort_by and not string.find("date -date name -name creator -creator", sort_by, 1, true) then
+            send_irc_message(target, nick .. ": ❌ Option de tri invalide. Utilisez: date, -date, name, -name, creator, -creator")
+        else
+            send_irc_message(target, list_custom_menus(sort_by))
+        end
     end
     
     -- Afficher un menu : !showmenu NomDuMenu ou !listmenu NomDuMenu
@@ -1452,7 +1513,7 @@ function main()
     print("  !listurls [N]   - Afficher le contenu brut de la base PostgreSQL")
     print("  !menu [boire|manger] - Afficher le menu")
     print("  !addmenu <nom> <texte> - Créer un menu personnalisé")
-    print("  !listmenus [date|name|creator] - Lister les menus personnalisés (par date, nom ou créateur)")
+    print("  !listmenus [date|-date|name|-name|creator|-creator] - Lister les menus personnalisés (par date, nom ou créateur, avec ordre croissant/décroissant)")
     print("  !showmenu <nom>  - Afficher un menu personnalisé")
     print("  !delmenu <nom>   - Supprimer un menu personnalisé")
     print("  !date            - Afficher la date et l'heure")
