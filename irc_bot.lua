@@ -629,6 +629,54 @@ function list_cleaned_urls(limit)
     return output
 end
 
+-- Lister les URLs nettoyées avec toutes les informations (format brut de la base)
+function list_cleaned_urls_raw(limit)
+    if not db_conn then
+        return "❌ Base de données non disponible"
+    end
+    
+    limit = limit or 10
+    
+    local cursor = db_conn:execute(
+        "SELECT id, original_url, cleaned_url, created_at, cleaned_by, ip_address " ..
+        "FROM cleaned_urls ORDER BY created_at DESC" .. (limit and " LIMIT " .. limit or "")
+    )
+    
+    if not cursor then
+        return "❌ Erreur lors de la requête"
+    end
+    
+    local row = cursor:fetch({}, 'a')
+    if not row then
+        cursor:close()
+        return "Aucune URL trouvée dans la base de données"
+    end
+    
+    local count_cursor = db_conn:execute("SELECT COUNT(*) as total FROM cleaned_urls")
+    local total = 0
+    if count_cursor then
+        local count_row = count_cursor:fetch({}, 'a')
+        if count_row then
+            total = tonumber(count_row.total) or 0
+        end
+        count_cursor:close()
+    end
+    
+    local output = "🗄️ **Contenu de la base PostgreSQL** (cleaned_urls, " .. total .. " entrées) :"
+    local i = 0
+    while row do
+        i = i + 1
+        local ts = format_timestamp(tonumber(row.created_at) or os.time())
+        output = output .. string.format("\n%d. **ID:%s** | Original: %s | Nettoyée: %s | IP:%s | Par:%s | Date:%s",
+            i, row.id, row.original_url, row.cleaned_url, row.ip_address or 'N/A', row.cleaned_by, ts)
+        row = cursor:fetch(row, 'a')
+        if limit and i >= limit then break end
+    end
+    cursor:close()
+    
+    return output
+end
+
 -- Fonction utilitaire pour raccourcir les URLs
 function shorten_url(url, max_length)
     max_length = max_length or 50
@@ -1056,10 +1104,14 @@ function handle_message(msg)
     local urls_match = message:lower():match("^!urls(%s*)")
     local lasturls_match = message:lower():match("^!lasturls(%s*)")
     local listurls_match = message:lower():match("^!listurls(%s*)")
-    if urls_match or lasturls_match or listurls_match then
-        local limit_str = urls_match or lasturls_match or listurls_match or ""
+    if urls_match or lasturls_match then
+        local limit_str = urls_match or lasturls_match or ""
         local limit = tonumber(limit_str:match("^%s+(%d+)")) or (lasturls_match and 5 or nil)
         send_irc_message(target, list_cleaned_urls(limit))
+    elseif listurls_match then
+        local limit_str = listurls_match or ""
+        local limit = tonumber(limit_str:match("^%s+(%d+)")) or nil
+        send_irc_message(target, list_cleaned_urls_raw(limit))
     end
     
     -- Commande : menu (menu par défaut)
@@ -1070,7 +1122,7 @@ function handle_message(msg)
     
     -- Commande : aide
     if message:match("!help") or message:match("!aide") then
-        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - alias de !urls | !menu [boire|manger] - afficher le menu | " ..
+        local help_text = "Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
                          "!listmenus [date|name|creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
         send_irc_message(target, help_text)
@@ -1247,7 +1299,7 @@ function main()
     print("  !clean <url>    - Nettoyer une URL YouTube")
     print("  !urls [N]       - Lister les URLs nettoyées")
     print("  !lasturls [N]   - Lister les N dernières URLs nettoyées (défaut: 5)")
-    print("  !listurls [N]   - Alias de !urls")
+    print("  !listurls [N]   - Afficher le contenu brut de la base PostgreSQL")
     print("  !menu [boire|manger] - Afficher le menu")
     print("  !addmenu <nom> <texte> - Créer un menu personnalisé")
     print("  !listmenus [date|name|creator] - Lister les menus personnalisés (par date, nom ou créateur)")
