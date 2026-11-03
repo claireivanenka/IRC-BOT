@@ -42,7 +42,7 @@ make test
 | `!menu boire` | Affiche les boissons | `!menu boire` |
 | `!menu manger` | Affiche la nourriture | `!menu manger` |
 | `!addmenu <nom> <texte>` | Crée un menu personnalisé | `!addmenu plat Soupe de légumes` |
-| `!listmenus` | Liste tous les menus personnalisés | `!listmenus` |
+| `!listmenus [date\|name\|creator]` | Liste tous les menus personnalisés (avec options de tri) | `!listmenus date` |
 | `!showmenu <nom>` | Affiche un menu personnalisé | `!showmenu plat` |
 | `!delmenu <nom>` | Supprime un menu personnalisé | `!delmenu plat` |
 | `!help` | Affiche l'aide | `!help` |
@@ -127,9 +127,20 @@ Le bot permet de créer, gérer et afficher des **menus personnalisés** avec ho
 | Commande | Description | Exemple |
 |----------|-------------|---------|
 | `!addmenu <nom> <texte>` | Crée un nouveau menu personnalisé | `!addmenu plat_du_jour Soupe de légumes avec pain` |
-| `!listmenus` | Liste tous les menus personnalisés créés | `!listmenus` |
+| `!listmenus [date\|name\|creator]` | Liste tous les menus personnalisés (tri possible) | `!listmenus date` |
 | `!showmenu <nom>` | Affiche un menu personnalisé avec son horodatage | `!showmenu plat_du_jour` |
 | `!delmenu <nom>` | Supprime un menu personnalisé | `!delmenu plat_du_jour` |
+
+#### Options de tri pour `!listmenus`
+
+| Option | Description | Exemple |
+|--------|-------------|---------|
+| `!listmenus` | Affiche dans l'ordre d'insertion | `!listmenus` |
+| `!listmenus date` | **Trie par date (du plus récent au plus ancien)** | `!listmenus date` |
+| `!listmenus name` | Trie par nom (ordre alphabétique A-Z) | `!listmenus name` |
+| `!listmenus creator` | Trie par créateur (ordre alphabétique A-Z) | `!listmenus creator` |
+
+**Note** : `!listmenu` est un alias de `!listmenus` et accepte les mêmes options.
 
 ### Fonctionnalités
 
@@ -149,7 +160,19 @@ Le bot permet de créer, gérer et afficher des **menus personnalisés** avec ho
 **Lister les menus** :
 ```irc
 <Alice> !listmenus
-<Bot> 📋 **Menus personnalisés** (2) : [1] plat_du_jour, [2] dessert
+<Bot> 📋 **Menus personnalisés** (2) : 1. **plat_du_jour** *(par Alice)* - 2024-11-03 14:30:25 | 2. **dessert** *(par Alice)* - 2024-11-03 14:35:25
+```
+
+**Lister les menus triés par date (du plus récent au plus ancien)** :
+```irc
+<Alice> !listmenus date
+<Bot> 📋 **Menus personnalisés** (2) : 1. **dessert** *(par Alice)* - 2024-11-03 14:35:25 | 2. **plat_du_jour** *(par Alice)* - 2024-11-03 14:30:25
+```
+
+**Lister les menus triés par nom** :
+```irc
+<Alice> !listmenus name
+<Bot> 📋 **Menus personnalisés** (2) : 1. **dessert** *(par Alice)* - 2024-11-03 14:35:25 | 2. **plat_du_jour** *(par Alice)* - 2024-11-03 14:30:25
 ```
 
 **Afficher un menu spécifique** :

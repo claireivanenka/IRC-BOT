@@ -94,6 +94,32 @@ Voir [docs/database_schema.sql](docs/database_schema.sql)
 
 ---
 
+## 🚀 [1.2.0] - 2024-11-03
+
+### ✨ Tri des menus personnalisés
+
+#### Ajouté
+- **Tri des menus par horodatage** : La commande `!listmenus` accepte maintenant des options de tri
+- **Options de tri multiples** : Tri par date (du plus récent au plus ancien), par nom (alphabétique), ou par créateur
+- **Affichage compact** : Les menus sont maintenant affichés sur une seule ligne avec séparateurs "|"
+
+#### Commandes améliorées
+| Commande | Description |
+|----------|-------------|
+| `!listmenus` | Liste les menus dans l'ordre d'insertion |
+| `!listmenus date` | Liste les menus du plus récent au plus ancien |
+| `!listmenus name` | Liste les menus par ordre alphabétique |
+| `!listmenus creator` | Liste les menus par créateur (A-Z) |
+
+#### Exemple d'utilisation
+```irc
+!listmenus date      # Affiche les menus les plus récents en premier
+!listmenus name      # Affiche les menus dans l'ordre alphabétique
+!listmenu creator    # Alias de !listmenus creator
+```
+
+---
+
 ## 🔄 [Non sorti]
 
 ### À venir (Roadmap)
