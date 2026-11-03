@@ -349,7 +349,7 @@ local menu = {
 
 -- Table pour stocker les menus personnalisés
 -- Structure: {name = nom, content = contenu, created_at = timestamp, created_by = nick}
-local custom_menus = {}
+custom_menus = {}
 
 -- Fichier de sauvegarde des menus
 local custom_menus_file = "custom_menus.dat"
