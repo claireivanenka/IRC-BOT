@@ -945,6 +945,43 @@ function shorten_url(url, max_length)
     end
 end
 
+-- Envoyer un message long sur plusieurs lignes IRC
+-- @param target: canal ou nick cible
+-- @param message: message à envoyer (peut être long)
+-- @param max_line_length: longueur maximale par ligne (défaut: 400)
+function send_long_message(target, message, max_line_length)
+    max_line_length = max_line_length or 400
+    
+    -- Si le message est assez court, l'envoyer tel quel
+    if #message <= max_line_length then
+        send_irc_message(target, message)
+        return
+    end
+    
+    -- Diviser le message en lignes de max_line_length
+    local lines = {}
+    local current_line = ""
+    
+    for word in message:gmatch("%S+") do
+        if #current_line + #word + 1 <= max_line_length then
+            current_line = current_line .. (current_line ~= "" and " " or "") .. word
+        else
+            table.insert(lines, current_line)
+            current_line = word
+        end
+    end
+    
+    -- Ajouter la dernière ligne
+    if current_line ~= "" then
+        table.insert(lines, current_line)
+    end
+    
+    -- Envoyer chaque ligne
+    for _, line in ipairs(lines) do
+        send_irc_message(target, line)
+    end
+end
+
 -- Fonction utilitaire pour extraire le domaine d'une URL
 function extract_domain(url)
     -- Supprimer le protocole (http://, https://)
@@ -1458,15 +1495,19 @@ function handle_message(msg)
             local ip = get_ip_address(domain)
             log_message("DBG", "!clean handler", "cleaned=" .. tostring(cleaned) .. ", domain=" .. tostring(domain) .. ", ip=" .. tostring(ip))
             
-            -- Toujours envoyer la réponse avec l'URL nettoyée et l'IP
-            -- Tronquer l'URL si elle est trop longue pour éviter les sauts de ligne dans Irssi
-            local display_url = shorten_url(cleaned, 60)
-            local message = nick .. ": " .. display_url .. " [IP: " .. ip .. "]"
-            -- Limiter le message entier à 400 caractères pour éviter le wrapping dans Irssi
-            if #message > 400 then
-                message = nick .. ": " .. shorten_url(cleaned, 300) .. " [IP: " .. ip .. "]"
+            -- Envoyer l'URL nettoyée sur plusieurs lignes si nécessaire
+            -- Diviser en morceaux de 300 caractères pour éviter le wrapping forcé
+            local max_len = 300
+            local full_msg = nick .. ": " .. cleaned .. " [IP: " .. ip .. "]"
+            
+            if #full_msg <= max_len then
+                -- Message court, envoyer tel quel
+                send_irc_message(target, full_msg)
+            else
+                -- Message long, envoyer l'URL seule puis l'IP sur une autre ligne
+                send_irc_message(target, nick .. ": " .. cleaned)
+                send_irc_message(target, "[IP: " .. ip .. "]")
             end
-            send_irc_message(target, message)
             
             -- Sauvegarder l'URL nettoyée dans PostgreSQL si activé
             log_message("DBG", "!clean handler", "db_conn=" .. tostring(db_conn ~= nil))
