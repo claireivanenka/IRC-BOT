@@ -31,7 +31,7 @@ config = {
     -- ⚠️  SI TON NICK EST ENREGISTRÉ, ACTIVE CECI :
     nickserv = {
         enabled = true,            -- true pour activer l'identification automatique
-        password = "JusteVivreHeureuse€2029",  -- Mot de passe NickServ
+        password = "JusteVivre",  -- Mot de passe NickServ
         wait_time = 5,              -- Temps d'attente avant identification (secondes)
     },
     -- === LOGGING (JOURNAUX) ===
