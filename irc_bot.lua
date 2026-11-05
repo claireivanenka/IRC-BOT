@@ -26,7 +26,7 @@ config = {
     user = "titoune",               -- Identifiant utilisateur (généralement = nick)
     realname = "Bot YouTube Cleaner et Menu",  -- Nom affiché
     -- === CANAUX ===
-    channel = "#fauve",             -- Channel principal à rejoindre (DOIT exister)
+    channel = "#claire",             -- Channel principal à rejoindre (DOIT exister)
     -- === IDENTIFICATION NICKSERV (NÉCESSAIRE POUR LIBERA.CHAT) ===
     -- ⚠️  SI TON NICK EST ENREGISTRÉ, ACTIVE CECI :
     nickserv = {
@@ -1717,8 +1717,8 @@ function handle_message(msg)
         local help_text = "Commandes disponibles: !clean <url> - nettoyer n'importe quelle URL | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
                          "!listmenus [date|-date|name|-name|creator|-creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot"
-        if music_enabled then
-            help_text = help_text .. " | !music add <chemin|URL> - ajouter une piste | !music search <requête> - rechercher | !music info <id> - infos | !music stats - statistiques | !music dl <id> - télécharger | !music play <id> - jouer"
+        if music_enabled and music_manager then
+            help_text = help_text .. " | !music add <fichier> - ajouter une piste | !music search <texte> - rechercher | !music info <id> - infos piste | !music stats - statistiques | !music dl <id> - télécharger | !music play <id> - stream"
         end
         help_text = help_text .. " | !help - aide"
         send_irc_message(target, help_text)
@@ -1907,7 +1907,14 @@ function main()
     else
         welcome_msg = welcome_msg .. " (⚠️ NickServ: non configuré)"
     end
-    send_irc_message(config.channel, welcome_msg .. " Commandes: !clean <url>, !urls, !lasturls, !listurls, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help")
+    
+    -- Construire la liste des commandes
+    local commands_list = "!clean <url>, !urls, !lasturls, !listurls, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help"
+    if music_enabled then
+        commands_list = commands_list .. ", !music add, !music search, !music info, !music stats, !music dl, !music play"
+    end
+    
+    send_irc_message(config.channel, welcome_msg .. " Commandes: " .. commands_list)
     
     -- Afficher les infos dans la console
     print("\n" .. string.rep("=", 60))
