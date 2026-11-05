@@ -322,8 +322,6 @@ function M.index_directory(base_path, added_by)
         end
     end
     
-    handle:close()
-    
     log_message("INFO", string.format("Indexation terminée: %d fichiers indexés, %d erreurs", count, #errors))
     print(string.format("✅ Indexation terminée: %d fichiers indexés, %d erreurs", count, #errors))
     
