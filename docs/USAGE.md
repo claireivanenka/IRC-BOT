@@ -48,6 +48,13 @@ make test
 | `!listmenus [date\|name\|creator]` | Liste tous les menus personnalisés (avec options de tri) | `!listmenus date` |
 | `!showmenu <nom>` | Affiche un menu personnalisé | `!showmenu plat` |
 | `!delmenu <nom>` | Supprime un menu personnalisé | `!delmenu plat` |
+| `!music help` | Affiche l'aide du module musique | `!music help` |
+| `!music add <fichier>` | Ajoute une piste musicale avec extraction des tags | `!music add ma_chanson.mp3` |
+| `!music search <texte>` | Recherche des pistes dans la bibliothèque | `!music search queen` |
+| `!music info <id>` | Affiche les informations d'une piste | `!music info 1` |
+| `!music stats` | Affiche les statistiques de la bibliothèque | `!music stats` |
+| `!music dl <id>` | Génère un lien de téléchargement | `!music dl 1` |
+| `!music play <id>` | Génère un lien de streaming | `!music play 1` |
 | `!help` | Affiche l'aide | `!help` |
 
 ---
@@ -431,7 +438,7 @@ telnet irc.libera.chat 6667
 
 ```irc
 <Charlie> !help
-<Bot> Commandes disponibles: !clean <url> - nettoyer une URL YouTube | !menu [boire|manger] - afficher le menu | !help - afficher cette aide
+<Bot> Commandes disponibles: !clean <url> - nettoyer une URL | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | !addmenu <nom> <texte> - créer un menu | !listmenus - lister les menus | !showmenu <nom> - afficher un menu | !delmenu <nom> - supprimer un menu | !music add <fichier> - ajouter une piste | !music search <texte> - rechercher | !music info <id> - infos | !music stats - statistiques | !music dl <id> - télécharger | !music play <id> - jouer | !date - date | !ping - tester le bot | !help - aide
 ```
 
 ---

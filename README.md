@@ -2,8 +2,9 @@
 
 Un bot IRC écrit en Lua avec les fonctionnalités suivantes :
 
-- 🧹 **Nettoyage des URLs YouTube** : Supprime tous les paramètres de tracking
+- 🧹 **Nettoyage des URLs** : Supprime tous les paramètres de tracking (YouTube et autres)
 - 🍽️ **Menu interactif** : Affiche un menu de boissons et nourriture
+- 🎵 **Module Musique** : Gestion complète de bibliothèque musicale avec PostgreSQL
 - ⏰ **Date horaire** : Exécute `/exec -o date` à chaque heure ronde
 
 ## Prérequis
@@ -72,10 +73,26 @@ lua irc_bot.lua
 
 | Commande | Description |
 |----------|-------------|
-| `!clean <url>` | Nettoie une URL YouTube des trackers |
+| `!clean <url>` | Nettoie une URL de tous les trackers |
+| `!urls [N]` | Liste les URLs nettoyées |
+| `!lasturls [N]` | Liste les N dernières URLs nettoyées |
+| `!dns [N]` | Liste les requêtes DNS |
 | `!menu` | Affiche le menu complet (boissons + nourriture) |
 | `!menu boire` | Affiche seulement les boissons |
 | `!menu manger` | Affiche seulement la nourriture |
+| `!addmenu <nom> <texte>` | Crée un menu personnalisé |
+| `!listmenus` | Liste les menus personnalisés |
+| `!showmenu <nom>` | Affiche un menu personnalisé |
+| `!delmenu <nom>` | Supprime un menu personnalisé |
+| `!music help` | Affiche l'aide du module musique |
+| `!music add <fichier>` | Ajoute une piste musicale |
+| `!music search <texte>` | Recherche des pistes |
+| `!music info <id>` | Affiche les infos d'une piste |
+| `!music stats` | Statistiques de la bibliothèque |
+| `!music dl <id>` | Génère un lien de téléchargement |
+| `!music play <id>` | Génère un lien de streaming |
+| `!date` | Affiche la date et heure |
+| `!ping` | Teste si le bot est vivant |
 | `!help` ou `!aide` | Affiche l'aide |
 
 ### Exemples
@@ -149,6 +166,16 @@ Le menu propose une sélection de boissons et nourritures avec leurs prix.
 ```
 /exec -o date
 ```
+
+### 4. Module Musique
+
+Le bot inclut un module complet de gestion musicale :
+- Ajout de pistes avec extraction automatique des tags (ID3, Vorbis, etc.)
+- Recherche dans la bibliothèque
+- Streaming et téléchargement
+- Statistiques de lecture
+
+**Voir [docs/music.md](docs/music.md) pour la documentation complète du module musique.**
 
 ## Personnalisation
 
@@ -233,6 +260,14 @@ Vérifiez que :
 - **Freenode** : `irc.freenode.net` (port 6667 ou 6697)
 - **OFTC** : `irc.oftc.net` (port 6667 ou 6697)
 - **Undernet** : `irc.undernet.org` (port 6667)
+
+## 📚 Documentation
+
+- [Guide d'utilisation complet](docs/USAGE.md)
+- [Configuration avancée](docs/CONFIGURATION.md)
+- **[Module Musique](docs/music.md)** - Documentation complète
+- [Dépannage](docs/TROUBLESHOOTING.md)
+- [Développement](docs/DEVELOPMENT.md)
 
 ## Contribuer
 

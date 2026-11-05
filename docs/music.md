@@ -1,6 +1,6 @@
 # Module Musique - IRC-BOT
 
-Ce module ajoute une gestion complète de bibliothèque musicale au bot IRC, avec stockage PostgreSQL, lecture des tags audio, commandes IRC et player web.
+Ce module ajoute une gestion complète de bibliothèque musicale au bot IRC, avec stockage PostgreSQL, lecture des tags audio, commandes IRC et player web. **Le module est maintenant pleinement intégré et fonctionnel.**
 
 ## Table des matières
 
@@ -49,6 +49,34 @@ Installez les outils système :
 # Sur Debian/Ubuntu
 sudo apt-get install postgresql postgresql-contrib ffmpeg nginx
 ```
+
+---
+
+## 📋 Changelog des corrections
+
+### Version 1.2.1 (2026-11-05)
+✅ **Corrections apportées dans cette version :**
+
+1. **music_db.lua** :
+   - Correction des erreurs de syntaxe avec les appels `log_message` remplacés par `print()`
+   - Correction des chaînes de caractères mal échappées (apostrophes dans les messages d'erreur)
+   - Ajout du paramètre `config` optionnel à `music_db.init()` pour compatibilité
+   - Ajout de `return true` dans `music_db.init()`
+   - Implémentation de `get_track_by_hash()` pour la détection des doublons
+
+2. **music_manager.lua** :
+   - Correction du système de matching des commandes (tri par longueur décroissante)
+   - Les commandes les plus spécifiques (`!music help`, `!music add`) sont maintenant testées avant `!music`
+   - Vérification du caractère suivant pour éviter les faux positifs
+   - Correction de l'utilisation de `file_exists()` et `get_file_size()` depuis `tags.lua`
+
+3. **config.lua** :
+   - Activation du module musique par défaut (`enabled = true`)
+   - Répertoire par défaut changé en `./music` pour faciliter les tests
+
+4. **Intégration dans irc_bot.lua** :
+   - Module musique déjà intégré, maintenant pleinement fonctionnel
+   - Les commandes musique apparaissent dans `!help`
 
 ---
 
@@ -134,6 +162,43 @@ music = {
     allowed_extensions = {".mp3", ".flac", ".ogg", ".m4a", ".wav"}
 }
 ```
+
+---
+
+## ⚡ Activation rapide
+
+Si vous avez déjà le bot configuré avec PostgreSQL :
+
+1. **Activer le module dans `config_custom.lua`** :
+   ```lua
+   music = {
+       enabled = true,  -- Activer le module
+       music_dir = "./music",  -- Répertoire de stockage
+       base_url = "http://localhost:8080/music",
+       use_ffprobe = true,
+       use_exiftool = false,
+       max_file_size = 100 * 1024 * 1024,
+       allowed_extensions = {".mp3", ".flac", ".ogg", ".m4a", ".wav"}
+   }
+   ```
+
+2. **Créer le répertoire musique** :
+   ```bash
+   mkdir -p ./music
+   ```
+
+3. **Redémarrer le bot** :
+   ```bash
+   lua irc_bot.lua
+   ```
+
+4. **Tester les commandes** :
+   ```irc
+   !music help
+   !music stats
+   ```
+
+Le module est prêt à l'emploi ! 🎉
 
 ---
 

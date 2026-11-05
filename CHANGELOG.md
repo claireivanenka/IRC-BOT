@@ -13,6 +13,56 @@ Nous utilisons le [Semantic Versioning](https://semver.org/) :
 
 ---
 
+## 🎵 [1.3.0] - 2026-11-05
+
+### ✅ Module Musique pleinement fonctionnel
+
+#### Ajouté
+- **Module musique complet** : Gestion de bibliothèque musicale avec PostgreSQL
+- **Extraction des tags** : Lecture des métadonnées audio (ID3, Vorbis, FLAC, etc.) via ffprobe
+- **Commandes IRC musique** :
+  - `!music help` - Affiche l'aide complète du module
+  - `!music add <fichier>` - Ajoute une piste avec extraction automatique des tags
+  - `!music search <texte>` - Recherche dans la bibliothèque (titre, artiste, album, genre)
+  - `!music info <id>` - Affiche toutes les informations d'une piste
+  - `!music stats` - Statistiques (total pistes, total lectures, top 10)
+  - `!music dl <id>` - Génère un lien de téléchargement
+  - `!music play <id>` - Génère un lien de streaming
+- **Base de données PostgreSQL** : Table `tracks` avec index pour recherche optimisée
+- **Détection des doublons** : Utilisation du hash SHA-256 pour éviter les doublons
+- **Player web** : Interface HTML5 pour écouter les pistes en streaming
+- **API HTTP** : Endpoints REST pour interagir avec la bibliothèque
+
+#### Corrigé
+- **music_db.lua** : Correction des erreurs de syntaxe (appels `log_message` remplacés par `print`)
+- **music_db.lua** : Correction des chaînes avec apostrophes mal échappées
+- **music_db.lua** : Ajout du paramètre `config` optionnel à `music_db.init()`
+- **music_db.lua** : Implémentation de `get_track_by_hash()`
+- **music_manager.lua** : Correction du système de matching des commandes (tri par longueur décroissante)
+- **music_manager.lua** : Utilisation correcte de `tags.file_exists()` et `tags.get_file_size()`
+- **Intégration complète** dans irc_bot.lua avec affichage dans `!help`
+
+#### Modifié
+- **config.lua** : Activation du module musique par défaut (`enabled = true`)
+- **config.lua** : Répertoire par défaut changé en `./music`
+
+#### Documentation
+- Documentation complète dans [docs/music.md](docs/music.md)
+- Mise à jour du README.md avec les commandes musique
+- Mise à jour de USAGE.md avec les nouvelles commandes
+
+#### Fichiers ajoutés/modifiés
+- `music_db.lua` - Module de gestion de la base de données musicale
+- `music_manager.lua` - Gestionnaire des commandes musique
+- `tags.lua` - Extraction des tags audio
+- `sql/music_schema.sql` - Schéma de la base de données
+- `deploy/nginx.conf` - Configuration nginx pour le streaming
+- `deploy/player/index.html` - Player web
+- `deploy/player/player.js` - Logique du player
+- `deploy/music_api.lua` - API HTTP pour le module musique
+
+---
+
 ## 🚀 [1.0.0] - 2024-11-02
 
 ### ✨ Première version stable
@@ -280,6 +330,9 @@ Voir [CONTRIBUTING.md](CONTRIBUTING.md) pour les règles de contribution.
 
 | Version | Date | Fonctionnalités | Statut |
 |---------|------|------------------|--------|
+| 1.3.0 | 2026-11-05 | Module Musique complet, Extraction tags, Player web, API HTTP | ✅ Stable |
+| 1.2.0 | 2024-11-03 | Menus personnalisés, URL cleaning amélioré, DNS queries, PostgreSQL | ✅ Stable |
+| 1.1.0 | 2024-11-02 | Logging, Géolocalisation IP, Améliorations divers | ✅ Stable |
 | 1.0.0 | 2024-11-02 | Nettoyage YouTube, Menu, Date horaire | ✅ Stable |
 | 0.1.0 | 2024-11-01 | Version initiale (non publiée) | ❌ Déprécié |
 
