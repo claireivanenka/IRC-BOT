@@ -7,10 +7,13 @@ local music_db = {}
 music_db.table_name = "tracks"
 
 -- Initialiser la connexion (utilise la connexion db_conn globale)
-function music_db.init()
+function music_db.init(config)
     -- La connexion est gérée par le module principal
+    -- Si une config est fournie, elle peut être utilisée pour configurer
+    -- Mais nous utilisons la connexion globale db_conn
     -- Vérifier que la table existe
     music_db._ensure_table()
+    return true
 end
 
 -- S'assurer que la table existe
@@ -93,13 +96,13 @@ end
 -- @return: id de la piste insérée, ou nil en cas d'erreur
 function music_db.add_track(track)
     if not db_conn then
-        log_message("ERR", "music_db", "Connexion PostgreSQL non disponible")
+        print("[music_db ERROR] Connexion PostgreSQL non disponible")
         return nil
     end
     
     -- Vérifier les champs obligatoires
     if not track.titre then
-        log_message("ERR", "music_db", "Champ 'titre' manquant")
+        print("[music_db ERROR] Champ 'titre' manquant")
         return nil
     end
     
@@ -138,10 +141,10 @@ function music_db.add_track(track)
     end)
     
     if ok then
-        log_message("DBG", "music_db", "Piste ajoutée avec ID: " .. tostring(ok))
+    print("[music_db DEBUG] Piste ajout\xe9e avec ID: " .. tostring(ok))
         return ok
     else
-        log_message("ERR", "music_db", "Erreur ajout piste: " .. tostring(err))
+        print("[music_db ERROR] Erreur ajout piste: " .. tostring(err))
         return nil
     end
 end
@@ -153,6 +156,41 @@ function music_db.get_track_by_id(id)
     if not db_conn or not id then return nil end
     
     local query = "SELECT * FROM " .. music_db.table_name .. " WHERE id = " .. tonumber(id)
+    local cursor = db_conn:execute(query)
+    
+    if cursor then
+        local row = cursor:fetch({}, "a")
+        cursor:close()
+        if row then
+            return {
+                id = tonumber(row.id),
+                titre = row.titre,
+                artiste = row.artiste,
+                album = row.album,
+                annee = row.annee and tonumber(row.annee),
+                genre = row.genre,
+                duree = tonumber(row.duree),
+                bitrate = row.bitrate and tonumber(row.bitrate),
+                chemin_fichier = row.chemin_fichier,
+                url_streaming = row.url_streaming,
+                hash_fichier = row.hash_fichier,
+                ajoute_par = row.ajoute_par,
+                date_ajout = row.date_ajout,
+                nb_lectures = tonumber(row.nb_lectures),
+                date_derniere_lecture = row.date_derniere_lecture
+            }
+        end
+    end
+    return nil
+end
+
+-- Vérifier si une piste existe par son hash
+-- @param hash: hash SHA-256 du fichier
+-- @return: table avec les champs de la piste, ou nil
+function music_db.get_track_by_hash(hash)
+    if not db_conn or not hash then return nil end
+    
+    local query = "SELECT * FROM " .. music_db.table_name .. " WHERE hash_fichier = '" .. hash .. "'"
     local cursor = db_conn:execute(query)
     
     if cursor then

@@ -330,13 +330,7 @@ function tags.get_file_info(file_path)
     end
     
     -- Calculer le hash simple (basé sur la taille et le nom)
-    local attrs = pcall(require, "lfs") and require("lfs").attributes(file_path)
-    local hash
-    if attrs then
-        hash = string.format("%08x", (attrs.size + string.len(file_path)) % 16777216)
-    else
-        hash = string.format("%08x", (#content + string.len(file_path)) % 16777216)
-    end
+    local hash = string.format("%08x", (#content + string.len(file_path)) % 16777216)
     
     -- Obtenir les tags
     local tags_data = tags.read_tags(file_path)
@@ -346,6 +340,25 @@ function tags.get_file_info(file_path)
     tags_data.file_size = #content
     
     return tags_data, nil
+end
+
+-- Fonction pour vérifier si un fichier existe
+function tags.file_exists(file_path)
+    local file = io.open(file_path, "rb")
+    if file then
+        file:close()
+        return true
+    end
+    return false
+end
+
+-- Fonction pour obtenir la taille d'un fichier
+function tags.get_file_size(file_path)
+    local file = io.open(file_path, "rb")
+    if not file then return 0 end
+    local size = file:seek("end")
+    file:close()
+    return size
 end
 
 -- =====================================================================

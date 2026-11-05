@@ -149,11 +149,27 @@ function music_manager.handle_command(nick, channel, message)
         return nil
     end
     
-    -- Vérifier si le message commence par une commande musique
+    -- Créer une liste des commandes triées par longueur décroissante
+    -- pour que les commandes les plus spécifiques soient testées en premier
+    local sorted_commands = {}
     for cmd, info in pairs(music_manager.commands) do
+        table.insert(sorted_commands, {cmd = cmd, info = info, len = #cmd})
+    end
+    
+    -- Trier par longueur décroissante
+    table.sort(sorted_commands, function(a, b) return a.len > b.len end)
+    
+    -- Vérifier si le message commence par une commande musique
+    for _, entry in ipairs(sorted_commands) do
+        local cmd = entry.cmd
+        local info = entry.info
         if message:lower():sub(1, #cmd) == cmd:lower() then
-            local args = message:sub(#cmd + 1):match("^%s*(.*)")
-            return info.handler(nick, channel, args)
+            -- Vérifier qu'on a un match exact ou que le caractère suivant est un espace
+            local next_char = message:sub(#cmd + 1, #cmd + 1)
+            if next_char == "" or next_char == " " then
+                local args = message:sub(#cmd + 1):match("^%s*(.*)")
+                return info.handler(nick, channel, args)
+            end
         end
     end
     
@@ -202,39 +218,34 @@ function music_manager.add_track(nick, channel, args)
         temp_file = file_path
     else
         -- Vérifier que le fichier existe
-        local lfs = pcall(require, "lfs")
-        if lfs then
-            local lfs_module = require("lfs")
-            local attrs = lfs_module.attributes(file_path)
-            if not attrs then
-                return {"❌ Fichier non trouvé: " .. file_path}
-            end
-            
-            -- Vérifier l'extension
-            local extension = file_path:match("%.(%a+)$")
-            if extension then
-                extension = "." .. extension:lower()
-                local allowed = false
-                for _, ext in ipairs(music_manager.config.allowed_extensions) do
-                    if ext == extension then
-                        allowed = true
-                        break
-                    end
-                end
-                if not allowed then
-                    return {"❌ Extension non autorisée: " .. extension}
-                end
-            end
-            
-            -- Vérifier la taille
-            if attrs.size > music_manager.config.max_file_size then
-                return {"❌ Fichier trop grand (max: " .. (music_manager.config.max_file_size / 1024 / 1024) .. " Mo)"}
-            end
-            
-            temp_file = file_path
-        else
-            return {"❌ Impossible de vérifier le fichier (luafilesystem non disponible)"}
+        local tags_module = music_manager.tags
+        if not tags_module.file_exists(file_path) then
+            return {"❌ Fichier non trouvé: " .. file_path}
         end
+        
+        -- Vérifier l'extension
+        local extension = file_path:match("%.(%a+)$")
+        if extension then
+            extension = "." .. extension:lower()
+            local allowed = false
+            for _, ext in ipairs(music_manager.config.allowed_extensions) do
+                if ext == extension then
+                    allowed = true
+                    break
+                end
+            end
+            if not allowed then
+                return {"❌ Extension non autorisée: " .. extension}
+            end
+        end
+        
+        -- Vérifier la taille
+        local file_size = tags_module.get_file_size(file_path)
+        if file_size > music_manager.config.max_file_size then
+            return {"❌ Fichier trop grand (max: " .. (music_manager.config.max_file_size / 1024 / 1024) .. " Mo)"}
+        end
+        
+        temp_file = file_path
     end
     
     -- Extraire les métadonnées

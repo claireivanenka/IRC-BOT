@@ -84,6 +84,25 @@ if custom_config_file then
 end
 
 -- =====================================================================
+-- CHARGEMENT DU MODULE MUSIQUE
+-- =====================================================================
+local music_manager = nil
+local music_enabled = false
+
+-- Charger le module musique si disponible
+pcall(function()
+    music_manager = require("music_manager")
+    if music_manager then
+        music_enabled = music_manager.init(config)
+        if music_enabled then
+            print("✓ Module musique activé")
+        else
+            print("⚠️  Module musique désactivé (voir config)")
+        end
+    end
+end)
+
+-- =====================================================================
 -- EXEMPLES DE CONFIGURATION POUR AUTRES SERVEURS
 -- =====================================================================
 --
@@ -1697,7 +1716,11 @@ function handle_message(msg)
     if message:match("!help") or message:match("!aide") then
         local help_text = "Commandes disponibles: !clean <url> - nettoyer n'importe quelle URL | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | " ..
                          "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
-                         "!listmenus [date|-date|name|-name|creator|-creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot | !help - aide"
+                         "!listmenus [date|-date|name|-name|creator|-creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot"
+        if music_enabled then
+            help_text = help_text .. " | !music add <chemin|URL> - ajouter une piste | !music search <requête> - rechercher | !music info <id> - infos | !music stats - statistiques | !music dl <id> - télécharger | !music play <id> - jouer"
+        end
+        help_text = help_text .. " | !help - aide"
         send_irc_message(target, help_text)
     end
     
@@ -1783,6 +1806,18 @@ function handle_message(msg)
         send_irc_message(target, result)
     elseif message:lower():match("^!showmenu$") then
         send_irc_message(target, nick .. ": ❌ Utilisation: !showmenu <nom> ou !listmenu <nom>")
+    end
+    
+    -- =====================================================================
+    -- COMMANDES DU MODULE MUSIQUE
+    -- =====================================================================
+    if music_enabled and message:lower():match("^!music") then
+        local response = music_manager.handle_command(nick, target, message)
+        if response then
+            for _, line in ipairs(response) do
+                send_irc_message(target, line)
+            end
+        end
     end
 end
 

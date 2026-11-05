@@ -67,4 +67,15 @@ return {
         password = "irc_password", -- Mot de passe PostgreSQL
         menus_table = "custom_menus", -- Nom de la table pour les menus
     },
+    
+    -- Configuration du module musique
+    music = {
+        enabled = true,         -- true pour activer le module musique
+        music_dir = "./music",  -- Répertoire de stockage
+        base_url = "http://localhost:8080/music", -- URL de base
+        use_ffprobe = true,      -- Utiliser ffprobe pour lire les tags
+        use_exiftool = false,    -- Utiliser exiftool comme fallback
+        max_file_size = 100 * 1024 * 1024, -- 100 Mo max
+        allowed_extensions = {".mp3", ".flac", ".ogg", ".m4a", ".wav"}
+    },
 }
