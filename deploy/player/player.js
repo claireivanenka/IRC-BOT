@@ -33,8 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let isVolumeDragging = false;
     
     // Configuration
-    const API_BASE = 'http://localhost:8081/music';
-    const MUSIC_API = `${API_BASE}/api/tracks`;
+    const API_BASE = '/music/api';
+    const MUSIC_API = `${API_BASE}/tracks`;
     
     // Initialisation
     async function init() {
@@ -42,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadTracks();
             setupEventListeners();
             updateTrackList();
+            handleUrlParams();
         } catch (error) {
             showError(`Erreur d'initialisation: ${error.message}`);
         }
@@ -217,6 +218,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Jouer automatiquement une piste passée dans l'URL (?play=<url>&titre=<titre>)
+    function handleUrlParams() {
+        const params = new URLSearchParams(location.search);
+        const playUrl = params.get('play');
+        if (!playUrl) return;
+        
+        const titre = params.get('titre') || 'Piste demandée';
+        let index = filteredTracks.findIndex(t => t.url_streaming === playUrl || t.chemin_fichier === playUrl);
+        
+        if (index === -1) {
+            const temp = {
+                id: null,
+                titre: titre,
+                artiste: params.get('artiste') || '',
+                album: '',
+                genre: '',
+                annee: 0,
+                duree: 0,
+                chemin_fichier: playUrl,
+                url_streaming: playUrl,
+                nb_lectures: 0
+            };
+            tracks.push(temp);
+            filteredTracks.push(temp);
+            index = filteredTracks.length - 1;
+        }
+        
+        playTrack(index);
+        audioPlayer.play().catch(err => console.warn('Autoplay bloqué par le navigateur:', err));
+    }
+    
+
     // Lire une piste
     function playTrack(index) {
         if (index < 0 || index >= filteredTracks.length) return;
@@ -226,6 +259,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Mettre à jour l'URL de l'audio
         audioPlayer.src = track.url_streaming || track.chemin_fichier;
+        
+        // Lien de téléchargement
+        const dlBtn = document.getElementById('download-btn');
+        if (dlBtn) dlBtn.href = track.url_streaming || track.chemin_fichier;
         
         // Mettre à jour l'affichage
         currentTitle.textContent = track.titre;

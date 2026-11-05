@@ -342,12 +342,17 @@ function M.search_files(search_term, limit, offset)
     local limit_clause = limit and limit > 0 and "LIMIT " .. limit or ""
     local offset_clause = offset and offset > 0 and "OFFSET " .. offset or ""
     
+    local escaped_term = db:escape(search_term)
     local query = string.format(
-        "SELECT id, filename, file_type, file_size, duration, bitrate, sample_rate, channels, " ..
-        "path, added_by, added_date, last_played, play_count " ..
-        "FROM creamroad_files WHERE filename ILIKE '%%" .. db:escape(search_term) .. "%%' " ..
-        "OR path ILIKE '%%" .. db:escape(search_term) .. "%%' " ..
-        "ORDER BY filename " .. limit_clause .. " " .. offset_clause
+        "SELECT id, filename, artist, album, title, year, file_type, file_path, file_size, " ..
+        "duration, hash, play_count, last_played " ..
+        "FROM creamroad_files WHERE filename ILIKE '%%%s%%' " ..
+        "OR file_path ILIKE '%%%s%%' " ..
+        "OR title ILIKE '%%%s%%' " ..
+        "OR artist ILIKE '%%%s%%' " ..
+        "ORDER BY filename %s %s",
+        escaped_term, escaped_term, escaped_term, escaped_term,
+        limit_clause, offset_clause
     )
     
     local result = db:execute(query)
@@ -748,20 +753,60 @@ end
 -- =====================================================================
 
 function M.get_web_url(file_path)
-    if not config or not config.creamroad then return nil end
+    if not config or not config.creamroad or not file_path then return nil end
+
+    local cr = config.creamroad
+
+    -- URL web : explicite, ou déduite de la config nginx
+    local web_url = cr.web_url
+    if (not web_url or web_url == "") and cr.nginx then
+        local port_suffix = (cr.nginx.port and cr.nginx.port ~= 80) and (":" .. cr.nginx.port) or ""
+        web_url = "http://" .. (cr.nginx.server_name or "localhost") .. port_suffix .. "/creamroad"
+    end
+
+    -- Remplacer localhost par l'adresse publique si configurée
+    local public_host = cr.public_host
+    if public_host and web_url then
+        web_url = web_url:gsub("//localhost", "//" .. public_host):gsub("//127%.0%.0%.1", "//" .. public_host)
+    end
     
-    -- Remplacer le base_path par le web_url
-    local web_url = config.creamroad.web_url or ""
-    local base_path = config.creamroad.base_path or ""
-    
-    if web_url == "" or base_path == "" then return nil end
-    
-    -- Nettoyer le chemin
-    local clean_path = file_path:gsub("^" .. base_path, ""):gsub("^/+", "")
-    
-    -- Combiner avec l'URL web
-    return web_url .. "/" .. clean_path:gsub("^/+", "")
+    local base_path = cr.base_path or cr.root_path or ""
+    if not web_url or web_url == "" or base_path == "" then return nil end
+
+    -- Retirer le préfixe base_path par comparaison littérale
+    -- (gsub échouerait : base_path contient des caractères magiques Lua comme '-')
+    local clean_path = file_path
+    if file_path:sub(1, #base_path) == base_path then
+        clean_path = file_path:sub(#base_path + 1)
+    end
+    clean_path = clean_path:gsub("^/", "")
+
+    return web_url .. "/" .. clean_path
 end
+
+local function url_encode(str)
+    if not str then return "" end
+    return (str:gsub("[^%w%-._~]", function(c)
+        return string.format("%%%02X", string.byte(c))
+    end))
+end
+
+-- Lien vers le player web avec le morceau prêt à être joué
+function M.get_player_url(file_path, title)
+    local stream_url = M.get_web_url(file_path)
+    if not stream_url then return nil end
+
+    local origin = stream_url:match("^(https?://[^/]+)")
+    local path = stream_url:match("^https?://[^/]+(.*)$") or stream_url
+    if not origin or not path then return nil end
+
+    local player_url = origin .. "/creamroad/player/?play=" .. url_encode(path)
+    if title and title ~= "" then
+        player_url = player_url .. "&titre=" .. url_encode(title)
+    end
+    return player_url
+end
+
 
 function M.format_file_info(file)
     if not file then return "Fichier non trouvé" end

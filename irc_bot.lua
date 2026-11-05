@@ -1967,9 +1967,11 @@ function handle_message(msg)
                         creamroad_manager.increment_play_count(file.id)
                         -- Générer le lien nginx
                         local web_url = creamroad_manager.get_web_url(file.path or file.file_path)
+                        local player_url = creamroad_manager.get_player_url(file.path or file.file_path, file.title or file.filename)
                         if web_url then
                             local short_info = string.format("%s - %s", file.artist or "Inconnu", file.title or file.filename or "N/A")
-                            local response = string.format("▶️ **Lecture**: %s | 🔗 %s", short_info, web_url)
+                        local links = player_url and ("🎧 " .. player_url .. " | ⬇️ " .. web_url) or ("🔗 " .. web_url)
+                        local response = string.format("▶️ **Lecture**: %s | %s", short_info, links)
                             send_irc_message(target, response)
                             log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Lecture de %s (ID: %d) - URL: %s", file.filename, file.id, web_url))
                         else
@@ -2064,8 +2066,10 @@ function handle_message(msg)
                 if files and #files > 0 then
                     local file = files[1]
                     local web_url = creamroad_manager.get_web_url(file.path or file.file_path)
+                        local player_url = creamroad_manager.get_player_url(file.path or file.file_path, file.title or file.filename)
                     if web_url then
-                        local response = string.format("▶️ %s - %s | 🔗 %s", file.filename, file.artist or "Inconnu", web_url)
+                        local links = player_url and ("🎧 " .. player_url .. " | ⬇️ " .. web_url) or ("🔗 " .. web_url)
+                        local response = string.format("▶️ %s - %s | %s", file.filename, file.artist or "Inconnu", links)
                         send_irc_message(target, response)
                         log_message("INFO", "CREAMROAD", string.format("CR: Lecture de %s - URL: %s", file.filename, web_url))
                     else

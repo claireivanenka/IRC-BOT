@@ -14,6 +14,31 @@ local config = {
     base_url = "http://localhost:8080/music"
 }
 
+-- Configuration PostgreSQL (valeurs par défaut, surchargées par ../config.lua si présent)
+local db_config = {
+    host = "localhost",
+    port = 5432,
+    database = "irc_bot",
+    user = "irc_user",
+    password = "irc_password"
+}
+
+do
+    local script_dir = arg and arg[0] and arg[0]:match("^(.*)/") or "."
+    local chunk, load_err = loadfile(script_dir .. "/../config.lua")
+    if chunk then
+        local ok, user_config = pcall(chunk)
+        if ok and type(user_config) == "table" and type(user_config.database) == "table" then
+            local db = user_config.database
+            db_config.host = db.host or db_config.host
+            db_config.port = db.port or db_config.port
+            db_config.database = db.database or db.dbname or db_config.database
+            db_config.user = db.user or db_config.user
+            db_config.password = db.password or db_config.password
+        end
+    end
+end
+
 -- Fonction pour obtenir le message de status HTTP
 local function get_status_message(status)
     local messages = {
@@ -29,25 +54,43 @@ end
 -- Connexion à PostgreSQL
 local function get_db_connection()
     local env = luasql.postgres()
-    local conn = env:connect("irc_bot", "irc_user", "irc_password", "localhost", 5432)
+    -- Même forme que irc_bot.lua : chaîne de connexion unique
+    local conn_str = string.format("host=%s port=%d dbname=%s user=%s password=%s",
+        db_config.host,
+        db_config.port,
+        db_config.database,
+        db_config.user,
+        db_config.password)
+    local conn, err = env:connect(conn_str)
     if not conn then
-        print("Erreur: Impossible de se connecter à PostgreSQL")
-        return nil, env
+        print("Erreur: Impossible de se connecter à PostgreSQL: " .. tostring(err))
+        print("   Chaîne utilisée: host=" .. db_config.host .. " port=" .. db_config.port
+            .. " dbname=" .. db_config.database .. " user=" .. db_config.user)
+        env:close()
+        return nil, nil
     end
     return conn, env
 end
 
+-- Échapper une valeur littérale pour PostgreSQL (luasql ne supporte pas les requêtes paramétrées)
+local function sql_literal(value)
+    if type(value) == "number" then
+        return tostring(value)
+    end
+    return "'" .. tostring(value):gsub("'", "''") .. "'"
+end
+
 -- Exécuter une requête SQL
-local function execute_query(query, params)
+local function execute_query(query)
     local conn, env = get_db_connection()
     if not conn then return nil, "Connexion échouée" end
     
-    local cursor = conn:execute(query, params or {})
+    local cursor, err = conn:execute(query)
     if not cursor then
-        local err = conn:errmsg()
+        print("Erreur SQL: " .. tostring(err))
         conn:close()
         env:close()
-        return nil, err
+        return nil, tostring(err)
     end
     
     return cursor, conn, env
@@ -72,7 +115,8 @@ local function get_all_tracks()
             genre = row.genre or "",
             duree = tonumber(row.duree) or 0,
             chemin_fichier = row.chemin_fichier or "",
-            url_streaming = config.base_url .. "/stream/" .. (row.hash_fichier or ""),
+            url_streaming = (row.url_streaming and row.url_streaming ~= "" and row.url_streaming)
+                or (config.base_url .. "/stream/" .. (row.hash_fichier or "")),
             hash_fichier = row.hash_fichier or "",
             ajoute_par = row.ajoute_par or "",
             date_ajout = row.date_ajout or "",
@@ -89,10 +133,13 @@ end
 
 -- Rechercher des pistes
 local function search_tracks(query)
-    local search_pattern = "%" .. query .. "%"
+    local search_pattern = sql_literal("%" .. query .. "%")
     local cursor, conn, env = execute_query(
-        "SELECT * FROM tracks WHERE titre ILIKE $1 OR artiste ILIKE $1 OR album ILIKE $1 OR genre ILIKE $1 ORDER BY titre ASC",
-        {search_pattern})
+        "SELECT * FROM tracks WHERE titre ILIKE " .. search_pattern
+        .. " OR artiste ILIKE " .. search_pattern
+        .. " OR album ILIKE " .. search_pattern
+        .. " OR genre ILIKE " .. search_pattern
+        .. " ORDER BY titre ASC")
     if not cursor then
         return nil
     end
@@ -109,7 +156,8 @@ local function search_tracks(query)
             genre = row.genre or "",
             duree = tonumber(row.duree) or 0,
             chemin_fichier = row.chemin_fichier or "",
-            url_streaming = config.base_url .. "/stream/" .. (row.hash_fichier or ""),
+            url_streaming = (row.url_streaming and row.url_streaming ~= "" and row.url_streaming)
+                or (config.base_url .. "/stream/" .. (row.hash_fichier or "")),
             hash_fichier = row.hash_fichier or "",
             ajoute_par = row.ajoute_par or "",
             date_ajout = row.date_ajout or "",
@@ -156,6 +204,9 @@ local function get_stats()
         end
         cursor:close()
     end
+    if conn then conn:close() end
+    if env then env:close() end
+    conn, env = nil, nil
     
     -- Nombre total de pistes
     cursor, conn, env = execute_query("SELECT COUNT(*) as count FROM tracks")
@@ -164,6 +215,9 @@ local function get_stats()
         stats.total_tracks = tonumber(row.count) or 0
         cursor:close()
     end
+    if conn then conn:close() end
+    if env then env:close() end
+    conn, env = nil, nil
     
     -- Nombre total de lectures
     cursor, conn, env = execute_query("SELECT SUM(nb_lectures) as total FROM tracks")
@@ -264,15 +318,13 @@ local function start_server()
             local request_line = client:receive()
             if not request_line then
                 client:close()
-                -- skip
-            end
+            else
             
             local method, path, version = request_line:match("^(%S+) (%S+) HTTP/(%d%.%d)")
             if not method or not path then
                 client:send("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
                 client:close()
-                -- skip
-            end
+            else
             
             -- Lire les headers
             local headers = {}
@@ -309,6 +361,8 @@ local function start_server()
             client:send(response.body)
             
             client:close()
+            end
+            end
         end
         
         -- continue
