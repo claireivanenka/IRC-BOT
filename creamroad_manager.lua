@@ -342,7 +342,8 @@ function M.search_files(search_term, limit, offset)
     local limit_clause = limit and limit > 0 and "LIMIT " .. limit or ""
     local offset_clause = offset and offset > 0 and "OFFSET " .. offset or ""
     
-    local escaped_term = db:escape(search_term)
+    -- Normaliser les espaces en underscores (les fichiers utilisent Me_In_The_Bath)
+    local escaped_term = db:escape((search_term:gsub("%s+", "_")))
     local query = string.format(
         "SELECT id, filename, artist, album, title, year, file_type, file_path, file_size, " ..
         "duration, hash, play_count, last_played " ..
@@ -375,7 +376,7 @@ function M.get_file_by_name(filename)
     if not db then return nil, "Base de données non connectée" end
     
     local query = string.format(
-        "SELECT * FROM creamroad_files WHERE filename = '%s'",
+        "SELECT * FROM creamroad_files WHERE filename ILIKE '%%%s%%'",
         db:escape(filename)
     )
     

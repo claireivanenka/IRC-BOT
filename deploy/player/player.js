@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPauseBtn = document.getElementById('play-pause-btn');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
+    const shuffleBtn = document.getElementById('shuffle-btn');
     const progressBar = document.getElementById('progress-bar');
     const progress = document.getElementById('progress');
     const currentTimeDisplay = document.getElementById('current-time');
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPlaying = false;
     let isDragging = false;
     let isVolumeDragging = false;
+    let shuffleMode = false;
     
     // Configuration
     const API_BASE = '/music/api';
@@ -46,6 +48,36 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             showError(`Erreur d'initialisation: ${error.message}`);
         }
+    }
+    
+    // Jouer automatiquement une piste passée dans l'URL (?play=<url>&titre=<titre>)
+    function handleUrlParams() {
+        const params = new URLSearchParams(location.search);
+        const playUrl = params.get('play');
+        if (!playUrl) return;
+        
+        const titre = params.get('titre') || 'Piste demandée';
+        let index = filteredTracks.findIndex(t => t.url_streaming === playUrl || t.chemin_fichier === playUrl);
+        
+        if (index === -1) {
+            const temp = {
+                id: null,
+                titre: titre,
+                artiste: params.get('artiste') || '',
+                album: '',
+                genre: '',
+                annee: 0,
+                duree: 0,
+                chemin_fichier: playUrl,
+                url_streaming: playUrl,
+                nb_lectures: 0
+            };
+            tracks.push(temp);
+            filteredTracks.push(temp);
+            index = filteredTracks.length - 1;
+        }
+        
+        playTrack(index);
     }
     
     // Charger les pistes depuis l'API
@@ -83,6 +115,11 @@ document.addEventListener('DOMContentLoaded', () => {
         playPauseBtn.addEventListener('click', togglePlayPause);
         prevBtn.addEventListener('click', playPrevious);
         nextBtn.addEventListener('click', playNext);
+        
+        // Lecture aléatoire
+        if (shuffleBtn) {
+            shuffleBtn.addEventListener('click', toggleShuffle);
+        }
         
         // Barre de progression
         progressBar.addEventListener('click', (e) => {
@@ -172,9 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Appliquer le filtre actuel
     function applyFilter() {
-        const now = new Date();
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        
         switch (currentFilter) {
             case 'recent':
                 filteredTracks.sort((a, b) => new Date(b.date_ajout) - new Date(a.date_ajout));
@@ -218,38 +252,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Jouer automatiquement une piste passée dans l'URL (?play=<url>&titre=<titre>)
-    function handleUrlParams() {
-        const params = new URLSearchParams(location.search);
-        const playUrl = params.get('play');
-        if (!playUrl) return;
-        
-        const titre = params.get('titre') || 'Piste demandée';
-        let index = filteredTracks.findIndex(t => t.url_streaming === playUrl || t.chemin_fichier === playUrl);
-        
-        if (index === -1) {
-            const temp = {
-                id: null,
-                titre: titre,
-                artiste: params.get('artiste') || '',
-                album: '',
-                genre: '',
-                annee: 0,
-                duree: 0,
-                chemin_fichier: playUrl,
-                url_streaming: playUrl,
-                nb_lectures: 0
-            };
-            tracks.push(temp);
-            filteredTracks.push(temp);
-            index = filteredTracks.length - 1;
+    // Télécharger une piste en blob puis la jouer.
+    // Contournement d'un bug de streaming de Firefox : le moteur média
+    // gèle sur les FLAC servis en statique, alors que fetch les télécharge
+    // parfaitement (comme curl/mpv). On joue donc depuis une URL de blob.
+    let currentBlobUrl = null;
+    function loadTrackBlob(url) {
+        if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+            currentBlobUrl = null;
         }
-        
-        playTrack(index);
-        audioPlayer.play().catch(err => console.warn('Autoplay bloqué par le navigateur:', err));
+        playPauseBtn.textContent = '⏳';
+        fetch(url)
+            .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.blob();
+            })
+            .then(blob => {
+                currentBlobUrl = URL.createObjectURL(blob);
+                audioPlayer.src = currentBlobUrl;
+                audioPlayer.play().catch(err => {
+                    if (err.name === 'NotAllowedError') {
+                        // Autoplay bloqué par le navigateur : lecture au premier clic utilisateur
+                        isPlaying = false;
+                        playPauseBtn.textContent = '▶';
+                    } else if (err.name !== 'AbortError') {
+                        showError(`Erreur de lecture: ${err.message}`);
+                    }
+                });
+            })
+            .catch(err => showError(`Chargement de la piste impossible: ${err.message}`));
     }
     
-
     // Lire une piste
     function playTrack(index) {
         if (index < 0 || index >= filteredTracks.length) return;
@@ -257,10 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentTrackIndex = index;
         const track = filteredTracks[index];
         
-        // Mettre à jour l'URL de l'audio
-        audioPlayer.src = track.url_streaming || track.chemin_fichier;
-        
-        // Lien de téléchargement
+        // Lien de téléchargement (URL d'origine, pas le blob)
         const dlBtn = document.getElementById('download-btn');
         if (dlBtn) dlBtn.href = track.url_streaming || track.chemin_fichier;
         
@@ -272,8 +303,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentYear.textContent = `Année: ${track.annee}`;
         currentPlays.textContent = `Lectures: ${track.nb_lectures}`;
         
-        // Jouer la piste
-        audioPlayer.load();
+        // Charger en blob et jouer (contournement du bug de streaming Firefox)
+        loadTrackBlob(track.url_streaming || track.chemin_fichier);
         isPlaying = true;
         playPauseBtn.textContent = '⏸';
         
@@ -286,6 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Incrémenter le compteur de lectures
     async function incrementPlayCount(trackId) {
+        if (!trackId) return;
         try {
             await fetch(`${MUSIC_API}/${trackId}/play`, { method: 'POST' });
         } catch (error) {
@@ -308,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             if (audioPlayer.src) {
                 audioPlayer.play().catch(error => {
-                    showError(`Erreur de lecture: ${error.message}`);
+                    if (error.name !== 'AbortError') showError(`Erreur de lecture: ${error.message}`);
                 });
             } else {
                 playTrack(currentTrackIndex);
@@ -326,12 +358,37 @@ document.addEventListener('DOMContentLoaded', () => {
         playTrack(currentTrackIndex);
     }
     
-    // Lire la piste suivante
+    // Lire la piste suivante (aléatoire si le mode shuffle est actif)
     function playNext() {
         if (filteredTracks.length === 0) return;
         
-        currentTrackIndex = (currentTrackIndex + 1) % filteredTracks.length;
+        if (shuffleMode && filteredTracks.length > 1) {
+            let randomIndex;
+            do {
+                randomIndex = Math.floor(Math.random() * filteredTracks.length);
+            } while (randomIndex === currentTrackIndex);
+            currentTrackIndex = randomIndex;
+        } else {
+            currentTrackIndex = (currentTrackIndex + 1) % filteredTracks.length;
+        }
         playTrack(currentTrackIndex);
+    }
+    
+    // Activer/désactiver le mode lecture aléatoire
+    function toggleShuffle() {
+        shuffleMode = !shuffleMode;
+        if (shuffleBtn) {
+            shuffleBtn.classList.toggle('active', shuffleMode);
+            shuffleBtn.title = shuffleMode ? 'Lecture aléatoire activée' : 'Lecture aléatoire désactivée';
+        }
+    }
+    
+    // Jouer une piste entièrement au hasard
+    function playRandom() {
+        if (filteredTracks.length === 0) return;
+        
+        const randomIndex = Math.floor(Math.random() * filteredTracks.length);
+        playTrack(randomIndex);
     }
     
     // Mettre à jour la barre de progression

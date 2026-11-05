@@ -26,7 +26,7 @@ config = {
     user = "titoune",               -- Identifiant utilisateur (généralement = nick)
     realname = "Bot YouTube Cleaner et Menu",  -- Nom affiché
     -- === CANAUX ===
-    channel = "#claire",             -- Channel principal à rejoindre (DOIT exister)
+    channel = "#fauve",             -- Channel principal à rejoindre (DOIT exister)
     -- === IDENTIFICATION NICKSERV (NÉCESSAIRE POUR LIBERA.CHAT) ===
     -- ⚠️  SI TON NICK EST ENREGISTRÉ, ACTIVE CECI :
     nickserv = {
@@ -1553,7 +1553,24 @@ end
 -- Envoyer un message IRC
 function send_irc_message(target, message)
     if not connected or not irc_socket then return end
-    irc_socket:send("PRIVMSG " .. target .. " :" .. message .. "\r\n")
+    
+    -- IRC limite chaque message à 510 octets : découper les messages longs
+    local remaining = message
+    while #remaining > 0 do
+        local chunk
+        if #remaining <= 400 then
+            chunk = remaining
+            remaining = ""
+        else
+            local cut = 400
+            local head = remaining:sub(1, cut)
+            local space_pos = head:match("^.*()%s")
+            if space_pos and space_pos > 200 then cut = space_pos - 1 end
+            chunk = remaining:sub(1, cut)
+            remaining = remaining:sub(cut + 1):gsub("^%s+", "")
+        end
+        irc_socket:send("PRIVMSG " .. target .. " :" .. chunk .. "\r\n")
+    end
     
     -- Logger le message sortant
     if config.logging.enabled and config.logging.log_outgoing then
