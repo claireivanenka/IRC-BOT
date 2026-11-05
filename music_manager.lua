@@ -22,7 +22,7 @@ music_manager.default_config = {
 -- =====================================================================
 -- Initialisation
 -- =====================================================================
-function music_manager.init()
+function music_manager.init(external_config)
     -- Fusionner avec la configuration principale
     music_manager.config = {}
     for k, v in pairs(music_manager.default_config) do
@@ -30,6 +30,13 @@ function music_manager.init()
     end
     
     -- Charger depuis la config globale si disponible
+    if external_config and external_config.music then
+        for k, v in pairs(external_config.music) do
+            music_manager.config[k] = v
+        end
+    end
+    
+    -- Charger depuis _G.config si disponible
     if _G.config and _G.config.music then
         for k, v in pairs(_G.config.music) do
             music_manager.config[k] = v

@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isVolumeDragging = false;
     
     // Configuration
-    const API_BASE = window.location.pathname.replace(/\/player\/index\.html$/, '') || '/music';
+    const API_BASE = 'http://localhost:8081/music';
     const MUSIC_API = `${API_BASE}/api/tracks`;
     
     // Initialisation
