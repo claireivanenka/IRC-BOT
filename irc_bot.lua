@@ -1963,11 +1963,20 @@ function handle_message(msg)
                     local files, err = creamroad_manager.search_files(query, 1)
                     if files and #files > 0 then
                         local file = files[1]
-                        local response = "▶️ **Lecture**: " .. creamroad_manager.format_file_info(file)
                         -- Incrémenter le compteur de lecture
                         creamroad_manager.increment_play_count(file.id)
-                        send_irc_message(target, response)
-                        log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Lecture de %s (ID: %d)", file.filename, file.id))
+                        -- Générer le lien nginx
+                        local web_url = creamroad_manager.get_web_url(file.path or file.file_path)
+                        if web_url then
+                            local short_info = string.format("%s - %s", file.artist or "Inconnu", file.title or file.filename or "N/A")
+                            local response = string.format("▶️ **Lecture**: %s | 🔗 %s", short_info, web_url)
+                            send_irc_message(target, response)
+                            log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Lecture de %s (ID: %d) - URL: %s", file.filename, file.id, web_url))
+                        else
+                            local response = "▶️ **Lecture**: " .. creamroad_manager.format_file_info(file)
+                            send_irc_message(target, response)
+                            log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Lecture de %s (ID: %d)", file.filename, file.id))
+                        end
                     else
                         send_irc_message(target, nick .. ": ❌ Fichier non trouvé: " .. query)
                         log_message("WARNING", "CREAMROAD", string.format("CREAMROAD: Fichier non trouvé: %s", query))
@@ -2054,10 +2063,17 @@ function handle_message(msg)
                 local files, err = creamroad_manager.search_files(query, 1)
                 if files and #files > 0 then
                     local file = files[1]
-                    local response = "▶️ " .. file.filename .. " - " .. (file.artist or "Inconnu")
+                    local web_url = creamroad_manager.get_web_url(file.path or file.file_path)
+                    if web_url then
+                        local response = string.format("▶️ %s - %s | 🔗 %s", file.filename, file.artist or "Inconnu", web_url)
+                        send_irc_message(target, response)
+                        log_message("INFO", "CREAMROAD", string.format("CR: Lecture de %s - URL: %s", file.filename, web_url))
+                    else
+                        local response = "▶️ " .. file.filename .. " - " .. (file.artist or "Inconnu")
+                        send_irc_message(target, response)
+                        log_message("INFO", "CREAMROAD", string.format("CR: Lecture de %s", file.filename))
+                    end
                     creamroad_manager.increment_play_count(file.id)
-                    send_irc_message(target, response)
-                    log_message("INFO", "CREAMROAD", string.format("CR: Lecture de %s", file.filename))
                 else
                     send_irc_message(target, nick .. ": ❌ Non trouvé")
                     log_message("WARNING", "CREAMROAD", string.format("CR: Fichier non trouvé: %s", query))
