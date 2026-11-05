@@ -1755,7 +1755,7 @@ function handle_message(msg)
             table.insert(help_lines, "  Musique: !music add <fichier> - ajouter | !music search <texte> - rechercher | !music info <id> - infos | !music stats - stats | !music dl <id> - télécharger | !music play <id> - stream | !music recent [N] - récentes")
         end
         if creamroad_enabled and creamroad_manager then
-            table.insert(help_lines, "  CreamRoad: !creamroad [search|play|random|mostplayed|recent|info] | !cr [search|play|random]")
+            table.insert(help_lines, "  CreamRoad: !creamroad [search|play|random|mostplayed|recent|info|index] | !cr [search|play|random]")
         end
         table.insert(help_lines, "  Divers: !date - date | !ping - tester | !help - cette aide")
         
@@ -1980,8 +1980,16 @@ function handle_message(msg)
                 else
                     send_irc_message(target, nick .. ": ❌ Utilisation: !creamroad info <nom|ID>")
                 end
+            elseif subcmd == "index" then
+                send_irc_message(target, nick .. ": 📁 Indexation des fichiers CreamRoad en cours...")
+                local success, count = creamroad_manager.index_directory()
+                if success then
+                    send_irc_message(target, nick .. ": ✅ " .. count .. " fichiers indexés avec succès !")
+                else
+                    send_irc_message(target, nick .. ": ❌ Erreur lors de l'indexation: " .. count)
+                end
             else
-                send_irc_message(target, nick .. ": ❌ Commande CreamRoad inconnue. Essayez: search, random, mostplayed, recent, play, info")
+                send_irc_message(target, nick .. ": ❌ Commande CreamRoad inconnue. Essayez: search, random, mostplayed, recent, play, info, index")
             end
         end
     end
@@ -2174,6 +2182,7 @@ function main()
         print("  !creamroad mostplayed [N] - Top des fichiers joués")
         print("  !creamroad recent [N] - Fichiers récemment ajoutés")
         print("  !creamroad info <nom|ID> - Infos sur un fichier")
+        print("  !creamroad index      - Indexer tous les fichiers CreamRoad")
         print("  !cr search <terme>    - Recherche rapide (format court)")
         print("  !cr play <terme>      - Lecture rapide")
         print("  !cr random            - Fichier aléatoire")

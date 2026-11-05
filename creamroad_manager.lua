@@ -106,6 +106,213 @@ function M.check_tables()
 end
 
 -- =====================================================================
+-- Indexation des fichiers
+-- =====================================================================
+
+-- Fonction pour extraire les métadonnées d'un fichier audio
+function M.extract_metadata(filepath)
+    local metadata = {
+        title = "",
+        artist = "",
+        album = "",
+        genre = "",
+        year = nil,
+        track_number = nil,
+        duration = 0,
+        bitrate = 0,
+        file_type = filepath:match("%.([^%.]+)$") or "unknown"
+    }
+    
+    -- Pour l'instant, on extrait juste le nom du fichier
+    -- Une implémentation complète utiliserait ffprobe ou un parser ID3
+    local filename = filepath:match("([^/]+)$") or filepath
+    
+    -- Extraire le chemin relatif à base_path
+    local base_path = config.creamroad.base_path
+    local relative_path = filepath
+    if filepath:sub(1, #base_path + 1) == base_path .. "/" then
+        relative_path = filepath:sub(#base_path + 2)
+    elseif filepath:sub(1, #base_path) == base_path then
+        relative_path = filepath:sub(#base_path + 1)
+    end
+    
+    -- Parser le chemin relatif pour obtenir les dossiers
+    -- Format: audio/Artist/Album/01-Title.flac OU audio/Artist - Title.flac
+    local path_dirs = {}
+    for part in relative_path:gmatch("([^/]+)/") do
+        table.insert(path_dirs, part)
+    end
+    
+    -- Extraire artiste et album des dossiers
+    -- Les fichiers sont dans audio/, donc on ignore le premier dossier
+    -- Format: audio/Artist/Album/
+    if #path_dirs > 1 then
+        -- path_dirs[1] = "audio", path_dirs[2] = Artist, path_dirs[3] = Album (si présent)
+        metadata.artist = path_dirs[2] or metadata.artist
+        metadata.album = path_dirs[3] or metadata.album
+    end
+    
+    -- Essayer de parser le nom de fichier si artiste/album pas trouvés
+    -- Format: Artist-Album-01-Title.flac ou Artist - Title.flac ou 01-Title.flac
+    if not metadata.artist or metadata.artist == "" then
+        -- Essayer de trouver le premier " - " (espace-tiret-espace)
+        local dash_pos = filename:find(" - ")
+        if dash_pos then
+            metadata.artist = filename:sub(1, dash_pos - 1)
+            local rest = filename:sub(dash_pos + 3)
+            metadata.title = rest:match("(.-)%.%w+$") or rest
+        else
+            -- Sinon, prendre la première partie avant le premier tiret
+            local first_dash = filename:find("-")
+            if first_dash then
+                metadata.artist = filename:sub(1, first_dash - 1)
+                local rest = filename:sub(first_dash + 1)
+                -- Le titre est tout après le premier tiret
+                metadata.title = rest:match("(.-)%.%w+$") or rest
+            else
+                metadata.title = filename:match("(.-)%.%w+$") or filename
+            end
+        end
+    end
+    
+    if not metadata.title or metadata.title == "" then
+        metadata.title = filename:match("(.-)%.%w+$") or filename
+    end
+    
+    -- Nettoyer les noms (enlever les numéros de début comme 01-, 02-, etc.)
+    metadata.artist = metadata.artist:gsub("^[0-9]+-%s*", ""):gsub("^%s*", ""):gsub("%s*$", "")
+    metadata.album = metadata.album:gsub("^[0-9]+-%s*", ""):gsub("^%s*", ""):gsub("%s*$", "")
+    metadata.title = metadata.title:gsub("^[0-9]+-%s*", ""):gsub("^%s*", ""):gsub("%s*$", "")
+    
+    return metadata
+end
+
+-- Fonction pour calculer la durée (simplifiée - à améliorer avec ffprobe)
+function M.get_duration(filepath)
+    -- Pour l'instant, on retourne une durée par défaut
+    -- Une implémentation complète utiliserait ffprobe
+    return 0
+end
+
+-- Fonction pour indexer un fichier
+function M.index_file(filepath, added_by)
+    if not db then return false, "Base de données non connectée" end
+    if not enabled then return false, "Module CreamRoad non activé" end
+    
+    local filename = filepath:match("([^/]+)$") or filepath
+    local relative_path = filepath:gsub(config.creamroad.base_path .. "/", "")
+    
+    -- Vérifier si le fichier existe déjà
+    local existing = M.get_file_by_name(filename)
+    if existing then
+        return false, "Fichier déjà indexé"
+    end
+    
+    -- Extraire les métadonnées
+    local metadata = M.extract_metadata(filepath)
+    
+    -- Obtenir la taille du fichier (en bytes)
+    local file_size = 0
+    local f = io.open(filepath, "rb")
+    if f then
+        file_size = f:seek("end")
+        f:close()
+    end
+    
+    -- Calculer le hash
+    local hash = M.calculate_hash(filepath)
+    
+    -- Insérer dans la base de données (utiliser les colonnes existantes)
+    local query = string.format(
+        "INSERT INTO creamroad_files (file_path, filename, file_size, file_type, title, artist, album, comment, year, track, duration, resolution, format, license, hash) " ..
+        "VALUES ('%s', '%s', %d, '%s', '%s', '%s', '%s', '%s', %s, %s, %d, '%s', '%s', '%s', '%s') RETURNING id",
+        db:escape(filepath),
+        db:escape(filename),
+        file_size or 0,
+        db:escape(metadata.file_type),
+        db:escape(metadata.title),
+        db:escape(metadata.artist),
+        db:escape(metadata.album),
+        db:escape(metadata.genre or ""),  -- comment = genre
+        metadata.year or "NULL",
+        metadata.track_number or "NULL",
+        metadata.duration or 0,
+        db:escape("unknown"),  -- resolution
+        db:escape("unknown"),  -- format
+        db:escape(added_by or "system")  -- license = added_by
+    )
+    
+    local result = db:execute(query)
+    
+    if result and result[1] and result[1].id then
+        return true, result[1].id
+    end
+    
+    return false, "Erreur lors de l'insertion"
+end
+
+-- Fonction pour calculer un hash simple (à remplacer par SHA-256 si disponible)
+function M.calculate_hash(filepath)
+    -- Simple hash based on path and modification time
+    local mtime = 0
+    local f = io.open(filepath, "rb")
+    if f then
+        local stat = f:seek("end")
+        f:close()
+        -- Nous ne pouvons pas obtenir mtime facilement en pur Lua, donc on utilise le chemin
+        mtime = stat
+    end
+    return string.format("%s_%d", filepath:gsub("[^%w]", "_"):lower(), mtime)
+end
+
+-- Fonction pour indexer récursivement un dossier
+function M.index_directory(base_path, added_by)
+    if not db then return false, "Base de données non connectée" end
+    if not enabled then return false, "Module CreamRoad non activé" end
+    
+    local base_path = base_path or config.creamroad.base_path
+    local added_by = added_by or "system"
+    local count = 0
+    local errors = {}
+    
+    print(string.format("📁 Indexation du dossier: %s", base_path))
+    
+    -- Vérifier que le dossier existe
+    local extensions = {"mp3", "flac", "ogg", "m4a", "wav"}
+    local files = {}
+    
+    for _, ext in ipairs(extensions) do
+        local handle = io.popen(string.format("find '%s' -type f -iname '*.%s' 2>/dev/null", base_path, ext))
+        if handle then
+            for filepath in handle:lines() do
+                table.insert(files, filepath)
+            end
+            handle:close()
+        end
+    end
+    
+    -- Trier les fichiers pour un ordre déterministe
+    table.sort(files)
+    
+    for _, filepath in ipairs(files) do
+        local success, result = M.index_file(filepath, added_by)
+        if success then
+            count = count + 1
+            print(string.format("  ✅ %s", filepath))
+        else
+            table.insert(errors, {file = filepath, error = result})
+            print(string.format("  ❌ %s: %s", filepath, result))
+        end
+    end
+    
+    handle:close()
+    
+    print(string.format("✅ Indexation terminée: %d fichiers indexés, %d erreurs", count, #errors))
+    
+    return true, count
+end
+
+-- =====================================================================
 -- Fonctions de recherche
 -- =====================================================================
 
