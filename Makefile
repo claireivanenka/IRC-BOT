@@ -1,6 +1,6 @@
 # Makefile pour le bot IRC Lua
 
-.PHONY: install install-full install-music run run-music test test-full test-music clean help
+.PHONY: install install-full install-music install-creamroad run run-music run-creamroad test test-full test-music test-creamroad clean help setup-creamroad import-creamroad
 
 # Couleurs pour les messages
 GREEN = \033[0;32m
@@ -158,6 +158,90 @@ setup-music:
 	@echo "  3. Configurez config_custom.lua avec les paramètres musique"
 	@echo ""
 
+# =====================================================================
+# Cibles pour CreamRoad
+# =====================================================================
+
+install-creamroad:
+	@echo "$(YELLOW)Installation des dépendances pour CreamRoad...$(NC)"
+	@echo ""
+	@if [ -f /etc/debian_version ] || [ -f /etc/os-release ]; then \
+		echo "$(GREEN)✓ Détection de Debian/Ubuntu$(NC)"; \
+		sudo apt update; \
+		sudo apt install -y postgresql postgresql-contrib ffmpeg nginx luarocks; \
+		luarocks install luasql-postgres; \
+		luarocks install lua-json; \
+	else \
+		echo "$(RED)❌ Système non supporté.$(NC)"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "$(GREEN)✓ Installation des dépendances CreamRoad terminée!$(NC)"
+
+setup-creamroad:
+	@echo "$(YELLOW)Configuration de CreamRoad...$(NC)"
+	@echo ""
+	@mkdir -p /var/www/html/creamroad
+	@ln -sf /home/claire/IRC-BOT/CremRoad - Sep 2026 /var/www/html/creamroad
+	@cp deploy/nginx_creamroad.conf /etc/nginx/sites-available/creamroad
+	@ln -sf /etc/nginx/sites-available/creamroad /etc/nginx/sites-enabled/
+	@cp sql/creamroad_schema.sql /tmp/
+	@echo ""
+	@echo "$(GREEN)✓ Configuration de CreamRoad terminée!$(NC)"
+	@echo ""
+	@echo "Pour finaliser l'installation:"
+	@echo "  1. Exécutez : sudo nginx -t && sudo systemctl restart nginx"
+	@echo "  2. Importez le schéma SQL dans PostgreSQL:"
+	@echo "     sudo -u postgres psql -d irc_bot -f /tmp/creamroad_schema.sql"
+	@echo "  3. Exécutez : make import-creamroad pour importer les fichiers"
+	@echo ""
+
+import-creamroad:
+	@echo "$(YELLOW)Import des fichiers CreamRoad dans PostgreSQL...$(NC)"
+	@echo ""
+	@cd /home/claire/IRC-BOT && $(LUA) scripts/import_creamroad.lua
+	@echo ""
+	@echo "$(GREEN)✓ Import CreamRoad terminé!$(NC)"
+
+run-creamroad:
+	@echo "$(YELLOW)Démarrage du serveur CreamRoad...$(NC)"
+	@echo ""
+	@nginx -t && sudo systemctl restart nginx
+	@echo "$(GREEN)✓ nginx redémarré avec la configuration CreamRoad!$(NC)"
+	@echo ""
+	@echo "CreamRoad est maintenant accessible à : http://$(shell hostname -I | awk '{print $$1}')/creamroad/"
+	@echo ""
+
+test-creamroad:
+	@echo "$(YELLOW)Test de la configuration CreamRoad...$(NC)"
+	@echo ""
+	@if $(LUA) -e "require('luasql.postgres')" 2> /dev/null; then \
+		echo "$(GREEN)✓ luasql-postgres est installé$(NC)"; \
+	else \
+		echo "$(RED)❌ luasql-postgres n'est pas installé$(NC)"; \
+		exit 1; \
+	fi
+	@if [ -d "CremRoad - Sep 2026" ]; then \
+		echo "$(GREEN)✓ Dossier CreamRoad existe$(NC)"; \
+	else \
+		echo "$(RED)❌ Dossier CreamRoad non trouvé$(NC)"; \
+		exit 1; \
+	fi
+	@if [ -f "scripts/import_creamroad.lua" ]; then \
+		echo "$(GREEN)✓ Script d'import existe$(NC)"; \
+	else \
+		echo "$(RED)❌ Script d'import non trouvé$(NC)"; \
+		exit 1; \
+	fi
+	@if [ -f "sql/creamroad_schema.sql" ]; then \
+		echo "$(GREEN)✓ Schéma SQL existe$(NC)"; \
+	else \
+		echo "$(RED)❌ Schéma SQL non trouvé$(NC)"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "$(GREEN)✓ Tous les tests CreamRoad ont réussi!$(NC)"
+
 help:
 	@echo "Commandes disponibles:"
 	@echo ""
@@ -165,15 +249,18 @@ help:
 	@echo "  make install          - Installe les dépendances de base"
 	@echo "  make install-full     - Installe toutes les dépendances (base + musique)"
 	@echo "  make install-music    - Installe les dépendances pour le module musique"
+	@echo "  make install-creamroad - Installe les dépendances pour CreamRoad"
 	@echo ""
 	@echo "▶️   Exécution:"
 	@echo "  make run              - Démarre le bot IRC"
 	@echo "  make run-music        - Démarre le bot + API musique"
+	@echo "  make run-creamroad    - Redémarre nginx avec CreamRoad"
 	@echo ""
 	@echo "🧪 Tests:"
 	@echo "  make test             - Teste les dépendances de base"
 	@echo "  make test-full        - Teste toutes les dépendances"
 	@echo "  make test-music       - Teste les dépendances musique"
+	@echo "  make test-creamroad   - Teste la configuration CreamRoad"
 	@echo ""
 	@echo "🧹 Nettoyage:"
 	@echo "  make clean            - Nettoie les fichiers temporaires"
@@ -181,6 +268,10 @@ help:
 	@echo ""
 	@echo "⚙️  Configuration:"
 	@echo "  make setup-music      - Configure le module musique (nginx, etc.)"
+	@echo "  make setup-creamroad  - Configure CreamRoad (nginx, base de données)"
+	@echo ""
+	@echo "📥 Import:"
+	@echo "  make import-creamroad - Importe les fichiers CreamRoad dans PostgreSQL"
 	@echo ""
 	@echo "ℹ️   Aide:"
 	@echo "  make help             - Affiche cette aide"
