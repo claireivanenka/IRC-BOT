@@ -121,14 +121,15 @@ local creamroad_enabled = false
 pcall(function()
     creamroad_manager = require("creamroad_manager")
     if creamroad_manager then
-        -- Vérifier s'il n'est pas déjà initialisé par music_manager
-        if not (creamroad_manager.is_enabled and creamroad_manager:is_enabled()) then
+        -- Vérifier s'il est déjà initialisé par music_manager
+        if creamroad_manager.is_enabled and creamroad_manager.is_enabled() then
+            creamroad_enabled = true
+        else
+            -- Si pas encore initialisé, l'initialiser
             creamroad_enabled = creamroad_manager.init(config)
             if not creamroad_enabled then
                 print("⚠️  Module CreamRoad désactivé (voir config)")
             end
-        else
-            creamroad_enabled = true
         end
     end
 end)
@@ -2126,6 +2127,9 @@ function main()
     local commands_list = "!clean <url>, !urls, !lasturls, !listurls, !menu, !addmenu, !listmenus, !showmenu, !delmenu, !date, !ping, !help"
     if music_enabled then
         commands_list = commands_list .. ", !music add, !music search, !music info, !music stats, !music dl, !music play"
+    end
+    if creamroad_enabled then
+        commands_list = commands_list .. ", !creamroad, !creamroad search, !creamroad play, !creamroad random, !creamroad mostplayed"
     end
     
     send_irc_message(config.channel, welcome_msg .. " Commandes: " .. commands_list)

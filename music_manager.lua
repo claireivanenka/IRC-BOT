@@ -50,7 +50,7 @@ function M.init(user_config)
     if creamroad_ok and creamroad_module and config.creamroad and config.creamroad.enabled then
         creamroad_manager = creamroad_module
         -- Ne pas réinitialiser CreamRoad, juste vérifier s'il est déjà activé
-        if creamroad_manager.is_enabled and creamroad_manager:is_enabled() then
+        if creamroad_manager.is_enabled and creamroad_manager.is_enabled() then
             print("✓ Module musique intégré avec CreamRoad")
         else
             -- Si pas encore initialisé, l'initialiser

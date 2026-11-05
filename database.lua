@@ -4,7 +4,22 @@
 
 local M = {}
 
-function M.connect(config)
+function M.connect(user_config)
+    local config = user_config
+    
+    -- Si on reçoit la table database directement, la transformer
+    if config and config.database and not config.host then
+        -- On a reçu config.database, il faut extraire les champs
+        local db_config = config
+        config = {
+            database = db_config.database or db_config.dbname,
+            user = db_config.user,
+            password = db_config.password,
+            host = db_config.host,
+            port = db_config.port
+        }
+    end
+    
     if not config then
         print("⚠️  Configuration PostgreSQL manquante")
         return nil

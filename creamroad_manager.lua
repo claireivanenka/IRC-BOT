@@ -14,7 +14,31 @@ local enabled = false
 function M.init(user_config)
     config = user_config
     
-    if not config.creamroad or not config.creamroad.enabled then
+    -- Vérifier si creamroad existe dans la config, sinon utiliser des valeurs par défaut
+    if not config.creamroad then
+        config.creamroad = {
+            enabled = false,
+            root_path = "/home/claire/IRC-BOT/CreamRoad",
+            base_path = "/home/claire/IRC-BOT/CreamRoad - Sep 2026",
+            scan_depth = 3,
+            auto_index = true,
+            db_table = "creamroad_files",
+            web_url = "http://localhost/creamroad",
+            nginx = {
+                server_name = "localhost",
+                port = 80,
+                root = "/home/claire/IRC-BOT/CreamRoad",
+            },
+            tables = {
+                files = "creamroad_files",
+                stats = "creamroad_stats",
+                tags = "creamroad_tags",
+                playlists = "creamroad_playlists",
+            }
+        }
+    end
+    
+    if not config.creamroad.enabled then
         print("⚠️  Module CreamRoad désactivé")
         enabled = false
         return false
