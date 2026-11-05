@@ -82,4 +82,24 @@ return {
         password = "irc_password", -- Mot de passe PostgreSQL
         menus_table = "custom_menus", -- Nom de la table pour les menus
     },
+    
+    -- Configuration du module musique
+    music = {
+        enabled = false,         -- true pour activer le module musique
+        -- Répertoire de stockage des fichiers audio
+        music_dir = "/var/www/music",  -- Répertoire où les fichiers audio sont stockés
+        -- URL base pour le streaming/téléchargement
+        base_url = "https://music.yourdomain.tld", -- URL base du serveur nginx
+        -- Paramètres de streaming
+        streaming = {
+            enabled = true,        -- true pour activer le streaming
+            -- Chemin pour le streaming via nginx
+            stream_path = "/stream",
+            -- Chemin pour le téléchargement via nginx
+            download_path = "/dl",
+        },
+        -- Limites
+        max_file_size = 100 * 1024 * 1024, -- 100 Mo maximum
+        allowed_extensions = {"mp3", "flac", "ogg", "m4a", "wav"}, -- Extensions autorisées
+    },
 }

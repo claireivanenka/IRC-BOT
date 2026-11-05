@@ -120,6 +120,132 @@ Voir [docs/database_schema.sql](docs/database_schema.sql)
 
 ---
 
+## 🚀 [2.0.0] - 2026-11-04
+
+### 🎵 Module Musique - Gestion complète de bibliothèque musicale
+
+#### ⚡ Nouvelle fonctionnalité majeure
+Le bot dispose maintenant d'un module musique complet avec gestion de bibliothèque, streaming et player web.
+
+#### Ajouté
+- **Schéma PostgreSQL** : Nouvelle table `tracks` pour stocker les pistes musicales
+- **Module music_db.lua** : Fonctions CRUD pour gérer les pistes
+- **Module tags.lua** : Lecture des métadonnées audio (ID3, Vorbis, FLAC)
+  - Support natif du parsing binaire
+  - Fallback sur ffprobe/exiftool
+- **Commandes IRC musique** :
+  - `!music add <chemin|URL>` : Ajoute une piste avec extraction automatique des tags
+  - `!music search <requête>` : Recherche dans la bibliothèque
+  - `!music info <id>` : Affiche les informations complètes d'une piste
+  - `!music stats` : Affiche les statistiques de la bibliothèque
+  - `!music dl <id>` : Génère un lien de téléchargement
+  - `!music play <id>` : Envoie l'URL de streaming au channel
+
+#### Player Web
+- Interface web responsive en HTML5/CSS/JS
+- Lecture en streaming avec support du seeking
+- Recherche instantanée
+- Filtrage (Tous, Récents, Populaires)
+- Raccourcis clavier (Espace, ←, →, ↑, ↓)
+- Contrôle du volume
+
+#### Infrastructure
+- **Configuration nginx** : Streaming via `/music/stream/<hash>`, téléchargement via `/music/dl/<hash>`
+- **API HTTP** : Serveur Lua (`music_api.lua`) pour servir les données musicales
+- **Configuration complète** : Voir `deploy/nginx.conf` et `docs/music.md`
+
+#### Documentation
+- Guide complet dans [docs/music.md](docs/music.md)
+- Schéma de base de données dans [sql/music_schema.sql](sql/music_schema.sql)
+
+#### Dépendances
+- **luasql-postgres** : Connexion PostgreSQL
+- **lua-json** ou **dkjson** : Encodage/décodage JSON
+- **luasocket** : Serveur HTTP
+- **luafilesystem** : Gestion des fichiers
+- **ffmpeg** (ffprobe) : Lecture des tags audio
+- **exiftool** (optionnel) : Support de plus de formats
+
+#### Exemple d'utilisation
+```irc
+!music add /home/user/Musique/Queen/Bohemian_Rhapsody.mp3
+!music search queen
+!music info 1
+!music play 1
+!music stats
+```
+
+---
+
+## 🚀 [1.4.0] - 2026-11-03
+
+### 🌍 Nettoyage d'URLs avec GeoIP et DNS
+
+#### Ajouté
+- **Base de données des URLs nettoyées** : Table `cleaned_urls` avec IP et localisation GeoIP
+- **Résolution DNS automatique** : Extraction de l'IP pour chaque URL nettoyée
+- **Commandes améliorées** :
+  - `!clean <url>` : Nettoie n'importe quelle URL (YouTube, Temu, etc.) et extrait l'IP
+  - `!urls` : Affiche toutes les URLs nettoyées avec IP
+  - `!lasturls` : Affiche les dernières URLs nettoyées
+  - `!listurls` : Affiche toutes les URLs avec détails complets
+- **Support multi-sites** : Nettoyage des URLs Temu, YouTube, et autres
+- **Affichage compact** :Affichage sur une seule ligne pour les listes
+
+#### Fonctionnalités GeoIP
+- Détection automatique du pays à partir de l'IP
+- Stockage de la localisation dans la base de données
+- Affichage dans les listes d'URLs
+
+#### Améliorations
+- Algorithme de nettoyage amélioré (suppression complète des paramètres de tracking)
+- Gestion des URLs longues (affichage tronqué dans les listes)
+- Support des caractères spéciaux dans les URLs
+
+---
+
+## 🚀 [1.3.0] - 2026-11-03
+
+### ⏰ Commandes temporelles et améliorations
+
+#### Ajouté
+- **Commande !date** : Affiche la date et l'heure actuelles
+- **Exécution horaire automatique** : `/exec -o date` chaque heure ronde
+- **Commande !clean améliorée** : Support de toutes les URLs (pas seulement YouTube)
+
+#### Améliorations
+- Détection automatique des heures rondes
+- Gestion des erreurs pour les commandes invalides
+- Affichage amélioré des messages système
+
+---
+
+## 🚀 [1.2.0] - 2026-11-03
+
+### ✨ Tri des menus personnalisés
+
+#### Ajouté
+- **Tri des menus par horodatage** : La commande `!listmenus` accepte maintenant des options de tri
+- **Options de tri multiples** : Tri par date (du plus récent au plus ancien), par nom (alphabétique), ou par créateur
+- **Affichage compact** : Les menus sont maintenant affichés sur une seule ligne avec séparateurs "|"
+
+#### Commandes améliorées
+| Commande | Description |
+|----------|-------------|
+| `!listmenus` | Liste les menus dans l'ordre d'insertion |
+| `!listmenus date` | Liste les menus du plus récent au plus ancien |
+| `!listmenus name` | Liste les menus par ordre alphabétique |
+| `!listmenus creator` | Liste les menus par créateur (A-Z) |
+
+#### Exemple d'utilisation
+```irc
+!listmenus date      # Affiche les menus les plus récents en premier
+!listmenus name      # Affiche les menus dans l'ordre alphabétique
+!listmenu creator    # Alias de !listmenus creator
+```
+
+---
+
 ## 🔄 [Non sorti]
 
 ### À venir (Roadmap)
