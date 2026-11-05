@@ -60,6 +60,17 @@ config = {
         password = "irc_password", -- Mot de passe PostgreSQL
         menus_table = "custom_menus" -- Nom de la table pour les menus
     },
+    -- === MODULE MUSIQUE ===
+    -- Configuration pour le module de gestion musicale
+    music = {
+        enabled = true,             -- Activer/désactiver le module musique
+        music_dir = "./music",      -- Répertoire de stockage des fichiers musicaux
+        base_url = "http://localhost:8080/music", -- URL de base pour le streaming
+        use_ffprobe = true,         -- Utiliser ffprobe pour lire les tags audio
+        use_exiftool = false,       -- Utiliser exiftool comme fallback
+        max_file_size = 100 * 1024 * 1024, -- Taille maximale des fichiers (100 Mo)
+        allowed_extensions = {".mp3", ".flac", ".ogg", ".m4a", ".wav"} -- Extensions autorisées
+    },
 }
 
 -- Charger la configuration personnalisée si elle existe
