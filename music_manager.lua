@@ -16,7 +16,8 @@ end
 -- Fonction de logging interne
 local function log_message(level, message)
     if log_callback then
-        log_callback("MUSIC", level, message)
+        -- log_callback dans irc_bot.lua attend: log_message(level, source, message)
+        log_callback(level, "MUSIC", message)
     end
 end
 

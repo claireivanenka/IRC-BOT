@@ -1660,7 +1660,7 @@ function handle_message(msg)
     if message:match("^!clean %S+") or message:match("^!clean$") then
         local url = message:match("^!clean (%S+)")
         if url then
-            log_message("CMD", string.format("!clean: nick=%s, url=%s", nick, url))
+            log_message("CMD", "CLEAN", string.format("!clean: nick=%s, url=%s", nick, url))
             log_message("DBG", "!clean handler", "Processing URL: " .. url)
             log_message("DBG", "!clean handler", "config.database.enabled=" .. tostring(config.database and config.database.enabled))
             log_message("DBG", "!clean handler", "config.database=")
@@ -1901,34 +1901,34 @@ function handle_message(msg)
             elseif subcmd == "search" then
                 local query = cmd:match("^!creamroad search (.+)")
                 if query then
-                    log_message("CMD", string.format("CREAMROAD SEARCH: nick=%s, query=%s", nick, query))
+                    log_message("CMD", "CREAMROAD", string.format("CREAMROAD SEARCH: nick=%s, query=%s", nick, query))
                     local files, err = creamroad_manager.search_files(query, 5)
                     if files and #files > 0 then
                         local response = "🔍 **Résultats CreamRoad**: " .. creamroad_manager.format_file_list(files, 5)
                         send_irc_message(target, response)
-                        log_message("INFO", string.format("CREAMROAD: %d résultats trouvés pour '%s'", #files, query))
+                        log_message("INFO", "CREAMROAD", string.format("CREAMROAD: %d résultats trouvés pour '%s'", #files, query))
                     else
                         send_irc_message(target, nick .. ": ❌ Aucun fichier trouvé pour " .. query)
-                        log_message("INFO", string.format("CREAMROAD: Aucun résultat pour '%s'", query))
+                        log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Aucun résultat pour '%s'", query))
                     end
                 else
                     send_irc_message(target, nick .. ": ❌ Utilisation: !creamroad search <terme>")
                 end
             elseif subcmd == "random" then
                 local count = tonumber(cmd:match("^!creamroad random (%d+)")) or 5
-                log_message("CMD", string.format("CREAMROAD RANDOM: nick=%s, count=%d", nick, count))
+                log_message("CMD", "CREAMROAD", string.format("CREAMROAD RANDOM: nick=%s, count=%d", nick, count))
                 local files, err = creamroad_manager.get_random_files(count)
                 if files and #files > 0 then
                     local response = "🎲 **Fichiers aléatoires**: " .. creamroad_manager.format_file_list(files, count)
                     send_irc_message(target, response)
-                    log_message("INFO", string.format("CREAMROAD: %d fichiers aléatoires retournés", #files))
+                    log_message("INFO", "CREAMROAD", string.format("CREAMROAD: %d fichiers aléatoires retournés", #files))
                 else
                     send_irc_message(target, nick .. ": ❌ Aucun fichier trouvé")
-                    log_message("WARNING", "CREAMROAD: Aucun fichier trouvé pour random")
+                    log_message("WARNING", "CREAMROAD", "CREAMROAD: Aucun fichier trouvé pour random")
                 end
             elseif subcmd == "mostplayed" then
                 local limit = tonumber(cmd:match("^!creamroad mostplayed (%d+)")) or 5
-                log_message("CMD", string.format("CREAMROAD MOSTPLAYED: nick=%s, limit=%d", nick, limit))
+                log_message("CMD", "CREAMROAD", string.format("CREAMROAD MOSTPLAYED: nick=%s, limit=%d", nick, limit))
                 local files, err = creamroad_manager.get_most_played(limit)
                 if files and #files > 0 then
                     local lines = {"🏆 **Top CreamRoad**:"}
@@ -1939,27 +1939,27 @@ function handle_message(msg)
                     for _, line in ipairs(lines) do
                         send_irc_message(target, line)
                     end
-                    log_message("INFO", string.format("CREAMROAD: Top %d fichiers affichés", #files))
+                    log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Top %d fichiers affichés", #files))
                 else
                     send_irc_message(target, nick .. ": ❌ Aucun fichier trouvé")
-                    log_message("WARNING", "CREAMROAD: Aucun fichier trouvé pour mostplayed")
+                    log_message("WARNING", "CREAMROAD", "CREAMROAD: Aucun fichier trouvé pour mostplayed")
                 end
             elseif subcmd == "recent" then
                 local limit = tonumber(cmd:match("^!creamroad recent (%d+)")) or 5
-                log_message("CMD", string.format("CREAMROAD RECENT: nick=%s, limit=%d", nick, limit))
+                log_message("CMD", "CREAMROAD", string.format("CREAMROAD RECENT: nick=%s, limit=%d", nick, limit))
                 local files, err = creamroad_manager.get_recently_added(limit)
                 if files and #files > 0 then
                     local response = "🆕 **Nouveautés CreamRoad**: " .. creamroad_manager.format_file_list(files, limit)
                     send_irc_message(target, response)
-                    log_message("INFO", string.format("CREAMROAD: %d fichiers récents affichés", #files))
+                    log_message("INFO", "CREAMROAD", string.format("CREAMROAD: %d fichiers récents affichés", #files))
                 else
                     send_irc_message(target, nick .. ": ❌ Aucun fichier récent")
-                    log_message("WARNING", "CREAMROAD: Aucun fichier récent trouvé")
+                    log_message("WARNING", "CREAMROAD", "CREAMROAD: Aucun fichier récent trouvé")
                 end
             elseif subcmd == "play" then
                 local query = cmd:match("^!creamroad play (.+)")
                 if query then
-                    log_message("CMD", string.format("CREAMROAD PLAY: nick=%s, query=%s", nick, query))
+                    log_message("CMD", "CREAMROAD", string.format("CREAMROAD PLAY: nick=%s, query=%s", nick, query))
                     local files, err = creamroad_manager.search_files(query, 1)
                     if files and #files > 0 then
                         local file = files[1]
@@ -1967,10 +1967,10 @@ function handle_message(msg)
                         -- Incrémenter le compteur de lecture
                         creamroad_manager.increment_play_count(file.id)
                         send_irc_message(target, response)
-                        log_message("INFO", string.format("CREAMROAD: Lecture de %s (ID: %d)", file.filename, file.id))
+                        log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Lecture de %s (ID: %d)", file.filename, file.id))
                     else
                         send_irc_message(target, nick .. ": ❌ Fichier non trouvé: " .. query)
-                        log_message("WARNING", string.format("CREAMROAD: Fichier non trouvé: %s", query))
+                        log_message("WARNING", "CREAMROAD", string.format("CREAMROAD: Fichier non trouvé: %s", query))
                     end
                 else
                     send_irc_message(target, nick .. ": ❌ Utilisation: !creamroad play <terme>")
@@ -1978,12 +1978,12 @@ function handle_message(msg)
             elseif subcmd == "info" then
                 local query = cmd:match("^!creamroad info (.+)")
                 if query then
-                    log_message("CMD", string.format("CREAMROAD INFO: nick=%s, query=%s", nick, query))
+                    log_message("CMD", "CREAMROAD", string.format("CREAMROAD INFO: nick=%s, query=%s", nick, query))
                     local file, err = creamroad_manager.get_file_by_name(query)
                     if file then
                         local response = "ℹ️ **Info**: " .. creamroad_manager.format_file_info(file)
                         send_irc_message(target, response)
-                        log_message("INFO", string.format("CREAMROAD: Infos affichées pour %s", query))
+                        log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Infos affichées pour %s", query))
                     else
                         -- Essayer par ID
                         local file_id = tonumber(query)
@@ -1992,29 +1992,29 @@ function handle_message(msg)
                             if file then
                                 local response = "ℹ️ **Info**: " .. creamroad_manager.format_file_info(file)
                                 send_irc_message(target, response)
-                                log_message("INFO", string.format("CREAMROAD: Infos affichées pour ID %d", file_id))
+                                log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Infos affichées pour ID %d", file_id))
                             else
                                 send_irc_message(target, nick .. ": ❌ Fichier non trouvé: " .. query)
-                                log_message("WARNING", string.format("CREAMROAD: Fichier non trouvé: %s", query))
+                                log_message("WARNING", "CREAMROAD", string.format("CREAMROAD: Fichier non trouvé: %s", query))
                             end
                         else
                             send_irc_message(target, nick .. ": ❌ Fichier non trouvé: " .. query)
-                            log_message("WARNING", string.format("CREAMROAD: Fichier non trouvé: %s", query))
+                            log_message("WARNING", "CREAMROAD", string.format("CREAMROAD: Fichier non trouvé: %s", query))
                         end
                     end
                 else
                     send_irc_message(target, nick .. ": ❌ Utilisation: !creamroad info <nom|ID>")
                 end
             elseif subcmd == "index" then
-                log_message("CMD", string.format("CREAMROAD INDEX: nick=%s", nick))
+                log_message("CMD", "CREAMROAD", string.format("CREAMROAD INDEX: nick=%s", nick))
                 send_irc_message(target, nick .. ": 📁 Indexation des fichiers CreamRoad en cours...")
                 local success, count = creamroad_manager.index_directory()
                 if success then
                     send_irc_message(target, nick .. ": ✅ " .. count .. " fichiers indexés avec succès !")
-                    log_message("INFO", string.format("CREAMROAD: Indexation terminée - %d fichiers", count))
+                    log_message("INFO", "CREAMROAD", string.format("CREAMROAD: Indexation terminée - %d fichiers", count))
                 else
                     send_irc_message(target, nick .. ": ❌ Erreur lors de l'indexation: " .. count)
-                    log_message("ERROR", string.format("CREAMROAD: Erreur d'indexation: %s", count))
+                    log_message("ERROR", "CREAMROAD", string.format("CREAMROAD: Erreur d'indexation: %s", count))
                 end
             else
                 send_irc_message(target, nick .. ": ❌ Commande CreamRoad inconnue. Essayez: search, random, mostplayed, recent, play, info, index")
@@ -2033,52 +2033,52 @@ function handle_message(msg)
         if subcmd == "search" then
             local query = cmd:match("^!cr search (.+)")
             if query then
-                log_message("CMD", string.format("CR SEARCH: nick=%s, query=%s", nick, query))
+                log_message("CMD", "CREAMROAD", string.format("CR SEARCH: nick=%s, query=%s", nick, query))
                 local files, err = creamroad_manager.search_files(query, 3)
                 if files and #files > 0 then
                     local response = "🔍 **CreamRoad**: " .. creamroad_manager.format_file_list(files, 3)
                     send_irc_message(target, response)
-                    log_message("INFO", string.format("CR: %d résultats trouvés pour '%s'", #files, query))
+                    log_message("INFO", "CREAMROAD", string.format("CR: %d résultats trouvés pour '%s'", #files, query))
                 else
                     send_irc_message(target, nick .. ": ❌ Aucun résultat")
-                    log_message("INFO", string.format("CR: Aucun résultat pour '%s'", query))
+                    log_message("INFO", "CREAMROAD", string.format("CR: Aucun résultat pour '%s'", query))
                 end
             else
                 send_irc_message(target, nick .. ": ❌ Utilisation: !cr search <terme>")
-                log_message("WARNING", string.format("CR: Utilisation incorrecte de search"))
+                log_message("WARNING", "CREAMROAD", string.format("CR: Utilisation incorrecte de search"))
             end
         elseif subcmd == "play" then
             local query = cmd:match("^!cr play (.+)")
             if query then
-                log_message("CMD", string.format("CR PLAY: nick=%s, query=%s", nick, query))
+                log_message("CMD", "CREAMROAD", string.format("CR PLAY: nick=%s, query=%s", nick, query))
                 local files, err = creamroad_manager.search_files(query, 1)
                 if files and #files > 0 then
                     local file = files[1]
                     local response = "▶️ " .. file.filename .. " - " .. (file.artist or "Inconnu")
                     creamroad_manager.increment_play_count(file.id)
                     send_irc_message(target, response)
-                    log_message("INFO", string.format("CR: Lecture de %s", file.filename))
+                    log_message("INFO", "CREAMROAD", string.format("CR: Lecture de %s", file.filename))
                 else
                     send_irc_message(target, nick .. ": ❌ Non trouvé")
-                    log_message("WARNING", string.format("CR: Fichier non trouvé: %s", query))
+                    log_message("WARNING", "CREAMROAD", string.format("CR: Fichier non trouvé: %s", query))
                 end
             else
                 send_irc_message(target, nick .. ": ❌ Utilisation: !cr play <terme>")
             end
         elseif subcmd == "random" then
-            log_message("CMD", string.format("CR RANDOM: nick=%s", nick))
+            log_message("CMD", "CREAMROAD", string.format("CR RANDOM: nick=%s", nick))
             local file, err = creamroad_manager.get_random_files(1)
             if file and #file > 0 then
                 local response = "🎲 " .. file[1].filename .. " - " .. (file[1].artist or "Inconnu")
                 send_irc_message(target, response)
-                log_message("INFO", string.format("CR: Fichier aléatoire: %s", file[1].filename))
+                log_message("INFO", "CREAMROAD", string.format("CR: Fichier aléatoire: %s", file[1].filename))
             else
                 send_irc_message(target, nick .. ": ❌ Aucun fichier")
                 log_message("WARNING", "CR: Aucun fichier trouvé pour random")
             end
         else
             send_irc_message(target, nick .. ": ❌ Commande inconnue. Essayez: !cr search|play|random")
-            log_message("WARNING", string.format("CR: Commande inconnue: %s", subcmd or "nil"))
+            log_message("WARNING", "CREAMROAD", string.format("CR: Commande inconnue: %s", subcmd or "nil"))
         end
     end
 end
@@ -2176,7 +2176,7 @@ function main()
         commands_list = commands_list .. ", !music add, !music search, !music info, !music stats, !music dl, !music play"
     end
     if creamroad_enabled then
-        commands_list = commands_list .. ", !creamroad, !creamroad search, !creamroad play, !creamroad random, !creamroad mostplayed"
+        commands_list = commands_list .. ", !creamroad, !creamroad search, !creamroad play, !creamroad random, !creamroad mostplayed, !creamroad recent, !creamroad info, !creamroad index, !cr search, !cr play, !cr random"
     end
     
     send_irc_message(config.channel, welcome_msg .. " Commandes: " .. commands_list)
