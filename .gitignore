@@ -25,3 +25,17 @@ lua_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# Fichiers audio (CreamRoad)
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.wav
+*.aac
+*.wma
+*.opus
+
+# Dossier CreamRoad (contenant des fichiers audio)
+CreamRoad*/
+CreamRoad - Sep 2026/

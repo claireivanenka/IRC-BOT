@@ -1,514 +1,775 @@
 -- =====================================================================
--- Module de gestion de la musique pour IRC-BOT
+-- Music Manager - Gestion des fichiers audio pour le bot IRC
 -- =====================================================================
 
-local music_manager = {}
-
--- =====================================================================
--- Configuration par défaut
--- =====================================================================
-music_manager.default_config = {
-    enabled = false,
-    music_dir = "./music",
-    base_url = "http://localhost:8080/music",
-    use_ffprobe = true,
-    use_exiftool = false,
-    max_file_size = 100 * 1024 * 1024,  -- 100 Mo
-    allowed_extensions = {
-        ".mp3", ".flac", ".ogg", ".m4a", ".wav", ".aac", ".opus"
-    }
-}
+local M = {}
+local config = nil
+local db = nil
+local creamroad_manager = nil
 
 -- =====================================================================
 -- Initialisation
 -- =====================================================================
-function music_manager.init(external_config)
-    -- Fusionner avec la configuration principale
-    music_manager.config = {}
-    for k, v in pairs(music_manager.default_config) do
-        music_manager.config[k] = v
-    end
+
+function M.init(user_config)
+    config = user_config
     
-    -- Charger depuis la config globale si disponible
-    if external_config and external_config.music then
-        for k, v in pairs(external_config.music) do
-            music_manager.config[k] = v
-        end
-    end
-    
-    -- Charger depuis _G.config si disponible
-    if _G.config and _G.config.music then
-        for k, v in pairs(_G.config.music) do
-            music_manager.config[k] = v
-        end
-    end
-    
-    -- Vérifier la configuration
-    if not music_manager.config.enabled then
+    if not config.music or not config.music.enabled then
+        print("⚠️  Module musique désactivé")
         return false
     end
     
-    -- Créer le répertoire de musique s'il n'existe pas
-    local lfs = pcall(require, "lfs")
-    if lfs then
-        local ok, lfs_module = pcall(require, "lfs")
-        if ok then
-            local music_dir = music_manager.config.music_dir
-            local attrs = lfs_module.attributes(music_dir)
-            if not attrs then
-                local success, err = lfs_module.mkdir(music_dir)
-                if not success then
-                    print("⚠️  Impossible de créer le répertoire musique: " .. (err or ""))
-                else
-                    print("✓ Répertoire musique créé: " .. music_dir)
-                end
+    -- Vérifier que PostgreSQL est activé
+    if not config.database or not config.database.enabled then
+        print("⚠️  Module musique nécessite PostgreSQL activé")
+        return false
+    end
+    
+    -- Charger le module database
+    local db_module = require("database")
+    if not db_module then
+        print("⚠️  Impossible de charger le module database")
+        return false
+    end
+    
+    -- Initialiser la connexion à la base de données
+    db = db_module.connect(config.database)
+    if not db then
+        print("⚠️  Impossible de se connecter à PostgreSQL pour la musique")
+        return false
+    end
+    
+    -- Vérifier les tables musique
+    if not M.check_tables() then
+        print("⚠️  Tables musique non trouvées")
+        return false
+    end
+    
+    -- Si CreamRoad est activé, l'utiliser
+    local creamroad_ok, creamroad_module = pcall(require, "creamroad_manager")
+    if creamroad_ok and creamroad_module and config.creamroad and config.creamroad.enabled then
+        creamroad_manager = creamroad_module
+        -- Ne pas réinitialiser CreamRoad, juste vérifier s'il est déjà activé
+        if creamroad_manager.is_enabled and creamroad_manager:is_enabled() then
+            print("✓ Module musique intégré avec CreamRoad")
+        else
+            -- Si pas encore initialisé, l'initialiser
+            if creamroad_manager.init(config) then
+                print("✓ Module musique intégré avec CreamRoad")
+            else
+                print("⚠️  CreamRoad non disponible, utilisation du système local")
             end
         end
+    else
+        print("⚠️  CreamRoad non disponible, utilisation du système local")
     end
     
-    -- Charger les modules
-    music_manager.db = require("music_db")
-    music_manager.tags = require("tags")
+    -- Créer la table des musiques si elle n'existe pas
+    M.create_tables()
     
-    -- Initialiser la base de données
-    local db_ok = music_manager.db.init(_G.config and _G.config.postgres or nil)
-    if not db_ok then
-        print("⚠️  Impossible d'initialiser la base de données musique")
+    print("✓ Module musique activé")
+    return true
+end
+
+-- =====================================================================
+-- Vérification et création des tables
+-- =====================================================================
+
+function M.check_tables()
+    if not db then return false end
+    
+    -- Vérifier la table tracks
+    local query = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'tracks')"
+    local result = db:execute(query)
+    
+    if result and result[1] and (result[1].exists or result[1][1]) then
+        return true
     end
+    
+    return false
+end
+
+function M.create_tables()
+    if not db then return false end
+    
+    -- Créer la table tracks si elle n'existe pas
+    local query = [[
+        CREATE TABLE IF NOT EXISTS tracks (
+            id SERIAL PRIMARY KEY,
+            titre VARCHAR(500) NOT NULL,
+            artiste VARCHAR(500),
+            album VARCHAR(500),
+            annee INTEGER,
+            genre VARCHAR(255),
+            duree INTEGER, -- en secondes
+            bitrate INTEGER,
+            sample_rate INTEGER,
+            channels INTEGER,
+            chemin_fichier VARCHAR(1000) NOT NULL,
+            url_streaming VARCHAR(1000),
+            hash_fichier VARCHAR(64) UNIQUE, -- SHA-256
+            ajoute_par VARCHAR(100) DEFAULT 'system',
+            date_ajout TIMESTAMP DEFAULT NOW(),
+            nb_lectures INTEGER DEFAULT 0,
+            date_derniere_lecture TIMESTAMP,
+            track_number INTEGER,
+            total_tracks INTEGER,
+            disc_number INTEGER,
+            total_discs INTEGER,
+            commentaire TEXT,
+            cover_path VARCHAR(1000),
+            UNIQUE (hash_fichier)
+        )
+    ]]
+    
+    local result = db:execute(query)
+    
+    -- Créer un index sur les champs de recherche
+    local index_query = [[
+        CREATE INDEX IF NOT EXISTS tracks_titre_idx ON tracks (titre);
+        CREATE INDEX IF NOT EXISTS tracks_artiste_idx ON tracks (artiste);
+        CREATE INDEX IF NOT EXISTS tracks_album_idx ON tracks (album);
+        CREATE INDEX IF NOT EXISTS tracks_genre_idx ON tracks (genre);
+        CREATE INDEX IF NOT EXISTS tracks_annee_idx ON tracks (annee);
+        CREATE INDEX IF NOT EXISTS tracks_hash_idx ON tracks (hash_fichier);
+        CREATE INDEX IF NOT EXISTS tracks_ajoute_par_idx ON tracks (ajoute_par);
+    ]]
+    
+    db:execute(index_query)
+    
+    -- Créer la table playlists
+    local playlist_query = [[
+        CREATE TABLE IF NOT EXISTS music_playlists (
+            id SERIAL PRIMARY KEY,
+            nom VARCHAR(255) NOT NULL UNIQUE,
+            createur VARCHAR(100) DEFAULT 'system',
+            date_creation TIMESTAMP DEFAULT NOW()
+        )
+    ]]
+    
+    db:execute(playlist_query)
+    
+    -- Créer la table playlist_entries
+    local playlist_entries_query = [[
+        CREATE TABLE IF NOT EXISTS music_playlist_entries (
+            id SERIAL PRIMARY KEY,
+            playlist_id INTEGER REFERENCES music_playlists(id) ON DELETE CASCADE,
+            track_id INTEGER REFERENCES tracks(id) ON DELETE CASCADE,
+            position INTEGER DEFAULT 0
+        )
+    ]]
+    
+    db:execute(playlist_entries_query)
     
     return true
 end
 
 -- =====================================================================
--- Gestion des commandes IRC
+-- Extraction des métadonnées (fallback simple)
 -- =====================================================================
 
--- Table des commandes
-music_manager.commands = {
-    ["!music"] = {
-        description = "Module musique - Utilisez !music help pour l'aide",
-        handler = function(nick, channel, args)
-            return music_manager.show_help(nick, channel)
-        end
-    },
-    ["!music help"] = {
-        description = "Affiche l'aide du module musique",
-        handler = function(nick, channel, args)
-            return music_manager.show_help(nick, channel)
-        end
-    },
-    ["!music add"] = {
-        description = "Ajoute une piste à la bibliothèque",
-        usage = "!music add <chemin|URL>",
-        handler = function(nick, channel, args)
-            return music_manager.add_track(nick, channel, args)
-        end
-    },
-    ["!music search"] = {
-        description = "Recherche des pistes",
-        usage = "!music search <requête>",
-        handler = function(nick, channel, args)
-            return music_manager.search_tracks(nick, channel, args)
-        end
-    },
-    ["!music info"] = {
-        description = "Affiche les informations d'une piste",
-        usage = "!music info <id>",
-        handler = function(nick, channel, args)
-            return music_manager.show_track_info(nick, channel, args)
-        end
-    },
-    ["!music stats"] = {
-        description = "Affiche les statistiques de la bibliothèque",
-        handler = function(nick, channel, args)
-            return music_manager.show_stats(nick, channel)
-        end
-    },
-    ["!music dl"] = {
-        description = "Génère un lien de téléchargement",
-        usage = "!music dl <id>",
-        handler = function(nick, channel, args)
-            return music_manager.generate_download_link(nick, channel, args)
-        end
-    },
-    ["!music play"] = {
-        description = "Joue une piste (envoie l'URL de streaming)",
-        usage = "!music play <id>",
-        handler = function(nick, channel, args)
-            return music_manager.play_track(nick, channel, args)
-        end
+function M.extract_metadata_from_filename(filepath)
+    -- Extraction basique basée sur le nom de fichier
+    -- Format attendu: Artiste - Album - Titre.ext
+    local filename = filepath:match("[^/\\]+$")
+    if not filename then filename = filepath end
+    
+    local name = filename:gsub("%.%a+$", "")  -- Supprimer l'extension
+    
+    -- Essayer de parser : Artiste - Album - Titre
+    local artiste, album, titre = name:match("^(.-) - (.-) - (.+)$")
+    
+    if artiste and album and titre then
+        return {
+            titre = titre:gsub("^%s+", ""):gsub("%s+$", ""),
+            artiste = artiste:gsub("^%s+", ""):gsub("%s+$", ""),
+            album = album:gsub("^%s+", ""):gsub("%s+$", ""),
+            duree = 0,
+            bitrate = 0,
+            sample_rate = 44100,
+            channels = 2,
+        }
+    end
+    
+    -- Essayer : Artiste - Titre
+    artiste, titre = name:match("^(.-) - (.+)$")
+    if artiste and titre then
+        return {
+            titre = titre:gsub("^%s+", ""):gsub("%s+$", ""),
+            artiste = artiste:gsub("^%s+", ""):gsub("%s+$", ""),
+            album = "Inconnu",
+            duree = 0,
+            bitrate = 0,
+            sample_rate = 44100,
+            channels = 2,
+        }
+    end
+    
+    -- Par défaut
+    return {
+        titre = name,
+        artiste = "Inconnu",
+        album = "Inconnu",
+        duree = 0,
+        bitrate = 0,
+        sample_rate = 44100,
+        channels = 2,
     }
-}
-
--- =====================================================================
--- Traitement des commandes
--- =====================================================================
-
-function music_manager.handle_command(nick, channel, message)
-    if not music_manager.config.enabled then
-        return nil
-    end
-    
-    -- Créer une liste des commandes triées par longueur décroissante
-    -- pour que les commandes les plus spécifiques soient testées en premier
-    local sorted_commands = {}
-    for cmd, info in pairs(music_manager.commands) do
-        table.insert(sorted_commands, {cmd = cmd, info = info, len = #cmd})
-    end
-    
-    -- Trier par longueur décroissante
-    table.sort(sorted_commands, function(a, b) return a.len > b.len end)
-    
-    -- Vérifier si le message commence par une commande musique
-    for _, entry in ipairs(sorted_commands) do
-        local cmd = entry.cmd
-        local info = entry.info
-        if message:lower():sub(1, #cmd) == cmd:lower() then
-            -- Vérifier qu'on a un match exact ou que le caractère suivant est un espace
-            local next_char = message:sub(#cmd + 1, #cmd + 1)
-            if next_char == "" or next_char == " " then
-                local args = message:sub(#cmd + 1):match("^%s*(.*)")
-                return info.handler(nick, channel, args)
-            end
-        end
-    end
-    
-    return nil
 end
 
 -- =====================================================================
--- Commandes
+-- Calcul du hash SHA-256 (implémentation simple)
 -- =====================================================================
 
-function music_manager.show_help(nick, channel)
-    local help_lines = {
-        "🎵 Commandes du module Musique:",
-        "─" .. string.rep("─", 48),
-        "!music add <chemin|URL>   - Ajoute une piste avec extraction des tags",
-        "!music search <requête>   - Recherche dans la bibliothèque",
-        "!music info <id>          - Affiche les informations complètes",
-        "!music stats              - Affiche les statistiques",
-        "!music dl <id>             - Génère un lien de téléchargement",
-        "!music play <id>          - Envoie l'URL de streaming",
-        "!music help               - Affiche cette aide",
-        "─" .. string.rep("─", 48),
-        "Player web: " .. music_manager.config.base_url .. "/player/"
-    }
+function M.calculate_sha256(filepath)
+    -- Utiliser sha256sum si disponible
+    local handle = io.popen('sha256sum "' .. filepath .. '" 2>/dev/null')
+    if handle then
+        local result = handle:read("*a")
+        handle:close()
+        if result and result ~= "" then
+            return result:match("^[a-f0-9]+")
+        end
+    end
     
-    return help_lines
+    -- Fallback : générer un hash basé sur le chemin
+    local simple_hash = "unknown_" .. tostring(filepath:gsub("[^%w]", "_"))
+    return simple_hash:sub(1, 64)
 end
 
-function music_manager.add_track(nick, channel, args)
-    if not args or args == "" then
-        return {"❌ Utilisation: !music add <chemin|URL>"}
+-- =====================================================================
+-- CRUD pour les tracks
+-- =====================================================================
+
+function M.add_track(filepath, added_by)
+    if not db then return nil, "Base de données non connectée" end
+    
+    -- Vérifier que le fichier existe
+    local file = io.open(filepath, "rb")
+    if not file then
+        return nil, "Fichier non trouvé"
     end
+    file:close()
     
-    local file_path = args:match("^%s*(%S+)")
-    if not file_path then
-        return {"❌ Veuillez fournir un chemin de fichier ou une URL"}
-    end
-    
-    -- Vérifier si c'est une URL
-    local is_url = file_path:match("^https?://") ~= nil
-    
-    -- Télécharger ou traiter le fichier
-    local temp_file
-    if is_url then
-        -- Pour les URLs, on ne peut pas télécharger directement, on stocke l'URL
-        temp_file = file_path
-    else
-        -- Vérifier que le fichier existe
-        local tags_module = music_manager.tags
-        if not tags_module.file_exists(file_path) then
-            return {"❌ Fichier non trouvé: " .. file_path}
-        end
-        
-        -- Vérifier l'extension
-        local extension = file_path:match("%.(%a+)$")
-        if extension then
-            extension = "." .. extension:lower()
-            local allowed = false
-            for _, ext in ipairs(music_manager.config.allowed_extensions) do
-                if ext == extension then
-                    allowed = true
-                    break
-                end
-            end
-            if not allowed then
-                return {"❌ Extension non autorisée: " .. extension}
-            end
-        end
-        
-        -- Vérifier la taille
-        local file_size = tags_module.get_file_size(file_path)
-        if file_size > music_manager.config.max_file_size then
-            return {"❌ Fichier trop grand (max: " .. (music_manager.config.max_file_size / 1024 / 1024) .. " Mo)"}
-        end
-        
-        temp_file = file_path
+    -- Calculer le hash
+    local hash = M.calculate_sha256(filepath)
+    if not hash then
+        return nil, "Impossible de calculer le hash"
     end
     
     -- Extraire les métadonnées
-    local tags, err = music_manager.tags.read_tags(temp_file)
-    if not tags then
-        return {"⚠️  Impossible de lire les tags: " .. (err or "erreur inconnue")}
-    end
+    local metadata = M.extract_metadata_from_filename(filepath)
     
-    -- Calculer le hash
-    local hash = music_manager.calculate_file_hash(temp_file)
-    if not hash then
-        -- Générer un hash basé sur le chemin si on ne peut pas lire le fichier
-        hash = music_manager.simple_hash(temp_file)
-    end
-    
-    -- Préparer les données de la piste
-    local track_data = {
-        titre = tags.titre or "Inconnu",
-        artiste = tags.artiste or "Inconnu",
-        album = tags.album or "Inconnu",
-        annee = tags.annee or 0,
-        genre = tags.genre or "Autre",
-        duree = tags.duree or 0,
-        bitrate = tags.bitrate or 0,
-        chemin_fichier = is_url and temp_file or music_manager.get_relative_path(temp_file),
-        hash_fichier = hash,
-        ajoute_par = nick,
-        nb_lectures = 0
-    }
-    
-    -- Vérifier si la piste existe déjà (par hash)
-    local existing = music_manager.db.get_track_by_hash(hash)
-    if existing then
-        return {"⚠️  Une piste avec ce hash existe déjà (ID: " .. existing.id .. ")"}
-    end
-    
-    -- Sauvegarder dans la base de données
-    local track_id = music_manager.db.add_track(track_data)
-    if not track_id then
-        return {"❌ Impossible d'ajouter la piste"}
+    -- Calculer la taille
+    local file_size = 0
+    local size_file = io.open(filepath, "rb")
+    if size_file then
+        file_size = size_file:seek("end")
+        size_file:close()
     end
     
     -- Générer l'URL de streaming
-    local stream_url = music_manager.config.base_url .. "/stream/" .. hash
+    local streaming_url
+    if creamroad_manager then
+        streaming_url = creamroad_manager.get_web_url(filepath)
+    else
+        streaming_url = config.music.base_url .. "/stream/" .. hash
+    end
     
-    -- Message de confirmation
-    local response = {
-        "✅ Piste ajoutée (ID: " .. track_id .. "):",
-        "🎵 " .. tags.titre .. " | " .. tags.artiste .. " | " .. tags.album .. " | " .. 
-            (tags.annee or "???") .. " | " .. (tags.genre or "Autre") .. " | " .. 
-            music_manager.format_duration(tags.duree) .. " | " .. (tags.bitrate or 0) .. " kbps",
-        "🔗 Streaming: " .. stream_url,
-        "📥 Téléchargement: " .. music_manager.config.base_url .. "/dl/" .. hash .. "?file=" .. 
-            string.gsub(tags.titre or "track", "[^%w%-%._]", "_")
-    }
+    -- Préparer la requête d'insertion
+    local query = string.format(
+        "INSERT INTO tracks (titre, artiste, album, annee, genre, duree, bitrate, sample_rate, " ..
+        "channels, chemin_fichier, url_streaming, hash_fichier, ajoute_par) " ..
+        "VALUES ('%s', '%s', '%s', %d, '%s', %d, %d, %d, %d, '%s', '%s', '%s', '%s') " ..
+        "ON CONFLICT (hash_fichier) DO UPDATE SET " ..
+        "titre = EXCLUDED.titre, artiste = EXCLUDED.artiste, album = EXCLUDED.album, " ..
+        "ajoute_par = EXCLUDED.ajoute_par, date_ajout = NOW() " ..
+        "RETURNING id",
+        db:escape(metadata.titre or "Inconnu"),
+        db:escape(metadata.artiste or "Inconnu"),
+        db:escape(metadata.album or "Inconnu"),
+        0, -- annee
+        db:escape(metadata.genre or "Inconnu"),
+        metadata.duree or 0,
+        metadata.bitrate or 0,
+        metadata.sample_rate or 0,
+        metadata.channels or 2,
+        db:escape(filepath),
+        db:escape(streaming_url or ""),
+        db:escape(hash),
+        db:escape(added_by or "system")
+    )
     
-    return response
+    local result = db:execute(query)
+    
+    if result and result[1] then
+        return result[1].id, nil
+    end
+    
+    return nil, "Impossible d'ajouter la piste"
 end
 
-function music_manager.search_tracks(nick, channel, args)
-    if not args or args == "" then
-        return {"❌ Utilisation: !music search <requête>"}
+function M.get_track_by_id(track_id)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local query = string.format("SELECT * FROM tracks WHERE id = %d", tonumber(track_id))
+    local result = db:execute(query)
+    
+    return result and result[1] or nil, nil
+end
+
+function M.get_track_by_hash(hash)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local query = string.format("SELECT * FROM tracks WHERE hash_fichier = '%s'", db:escape(hash))
+    local result = db:execute(query)
+    
+    return result and result[1] or nil, nil
+end
+
+function M.search_tracks(query, limit, offset)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local limit_clause = limit and limit > 0 and "LIMIT " .. limit or "LIMIT 10"
+    local offset_clause = offset and offset > 0 and "OFFSET " .. offset or ""
+    
+    local search_query = string.format(
+        "SELECT * FROM tracks WHERE titre ILIKE '%%" .. db:escape(query) .. "%%' " ..
+        "OR artiste ILIKE '%%" .. db:escape(query) .. "%%' " ..
+        "OR album ILIKE '%%" .. db:escape(query) .. "%%' " ..
+        "ORDER BY titre " .. limit_clause .. " " .. offset_clause
+    )
+    
+    local result = db:execute(search_query)
+    return result, nil
+end
+
+function M.delete_track(track_id)
+    if not db then return false, "Base de données non connectée" end
+    
+    local query = string.format("DELETE FROM tracks WHERE id = %d", tonumber(track_id))
+    local result = db:execute(query)
+    
+    return result and true or false, nil
+end
+
+-- =====================================================================
+-- Statistiques
+-- =====================================================================
+
+function M.increment_play_count(track_id)
+    if not db then return false, "Base de données non connectée" end
+    
+    local query = string.format(
+        "UPDATE tracks SET nb_lectures = nb_lectures + 1, date_derniere_lecture = NOW() WHERE id = %d",
+        tonumber(track_id)
+    )
+    
+    local result = db:execute(query)
+    return result and true or false, nil
+end
+
+function M.get_most_played(limit)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local limit_clause = limit and limit > 0 and "LIMIT " .. limit or "LIMIT 10"
+    
+    local query = "SELECT * FROM tracks ORDER BY nb_lectures DESC, date_derniere_lecture DESC " .. limit_clause
+    local result = db:execute(query)
+    
+    return result, nil
+end
+
+function M.get_recently_played(limit)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local limit_clause = limit and limit > 0 and "LIMIT " .. limit or "LIMIT 10"
+    
+    local query = "SELECT * FROM tracks WHERE date_derniere_lecture IS NOT NULL ORDER BY date_derniere_lecture DESC " .. limit_clause
+    local result = db:execute(query)
+    
+    return result, nil
+end
+
+function M.get_recently_added(limit)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local limit_clause = limit and limit > 0 and "LIMIT " .. limit or "LIMIT 10"
+    
+    local query = "SELECT * FROM tracks ORDER BY date_ajout DESC " .. limit_clause
+    local result = db:execute(query)
+    
+    return result, nil
+end
+
+-- =====================================================================
+-- Playlists
+-- =====================================================================
+
+function M.create_playlist(name, creator)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local query = string.format(
+        "INSERT INTO music_playlists (nom, createur) VALUES ('%s', '%s') RETURNING id",
+        db:escape(name), db:escape(creator or "system")
+    )
+    
+    local result = db:execute(query)
+    return result and result[1] and result[1].id or nil, nil
+end
+
+function M.delete_playlist(playlist_id)
+    if not db then return false, "Base de données non connectée" end
+    
+    local query = string.format("DELETE FROM music_playlists WHERE id = %d", tonumber(playlist_id))
+    local result = db:execute(query)
+    
+    return result and true or false, nil
+end
+
+function M.add_track_to_playlist(playlist_id, track_id, position)
+    if not db then return false, "Base de données non connectée" end
+    
+    local query = string.format(
+        "INSERT INTO music_playlist_entries (playlist_id, track_id, position) VALUES (%d, %d, %d)",
+        tonumber(playlist_id), tonumber(track_id), position or 0
+    )
+    
+    local result = db:execute(query)
+    return result and true or false, nil
+end
+
+function M.remove_track_from_playlist(playlist_id, track_id)
+    if not db then return false, "Base de données non connectée" end
+    
+    local query = string.format(
+        "DELETE FROM music_playlist_entries WHERE playlist_id = %d AND track_id = %d",
+        tonumber(playlist_id), tonumber(track_id)
+    )
+    
+    local result = db:execute(query)
+    return result and true or false, nil
+end
+
+function M.get_playlist_tracks(playlist_id)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local query = string.format(
+        "SELECT t.* FROM tracks t " ..
+        "JOIN music_playlist_entries p ON t.id = p.track_id " ..
+        "WHERE p.playlist_id = %d ORDER BY p.position",
+        tonumber(playlist_id)
+    )
+    
+    local result = db:execute(query)
+    return result, nil
+end
+
+function M.get_all_playlists(limit)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local limit_clause = limit and limit > 0 and "LIMIT " .. limit or ""
+    
+    local query = "SELECT * FROM music_playlists ORDER BY nom " .. limit_clause
+    local result = db:execute(query)
+    
+    return result, nil
+end
+
+function M.get_playlist_by_name(name)
+    if not db then return nil, "Base de données non connectée" end
+    
+    local query = string.format("SELECT * FROM music_playlists WHERE nom = '%s'", db:escape(name))
+    local result = db:execute(query)
+    
+    return result and result[1] or nil, nil
+end
+
+-- =====================================================================
+-- Utilitaires
+-- =====================================================================
+
+function M.format_track_info(track)
+    if not track then return "Piste non trouvée" end
+    
+    local duration = track.duree and string.format("%02d:%02d", math.floor(track.duree / 60), track.duree % 60) or "N/A"
+    
+    local info = string.format(
+        "%s - %s | Album: %s | %s | %d kbps | %d Hz | %s | Joué %d fois",
+        track.titre or "Inconnu",
+        track.artiste or "Inconnu",
+        track.album or "Inconnu",
+        duration,
+        track.bitrate or 0,
+        track.sample_rate or 0,
+        track.channels or "N/A",
+        track.nb_lectures or 0
+    )
+    
+    if track.url_streaming and track.url_streaming ~= "" then
+        info = info .. " | URL: " .. track.url_streaming
     end
     
-    local query = args:match("^%s*(%S+)") or args
-    local tracks = music_manager.db.search_tracks(query)
+    return info
+end
+
+function M.format_track_list(tracks, limit_display)
+    if not tracks or #tracks == 0 then return "Aucune piste trouvée" end
     
-    if not tracks or #tracks == 0 then
-        return {"🔍 Aucune piste trouvée pour: " .. query}
-    end
+    local limit = limit_display or 5
+    local count = math.min(#tracks, limit)
+    local lines = {}
     
-    local response = {"🔍 Résultats (" .. (#tracks > 5 and "5+" or #tracks) .. ") pour: " .. query .. ":"}
-    
-    local max_results = math.min(#tracks, 5)
-    for i = 1, max_results do
+    for i = 1, count do
         local track = tracks[i]
-        table.insert(response, string.format("%d. %s - %s [%s, %d, %s, %s]",
-            track.id,
-            track.titre,
-            track.artiste,
-            track.album,
-            track.annee or 0,
-            track.genre,
-            music_manager.format_duration(track.duree)
-        ))
+        local duration = track.duree and string.format("%02d:%02d", math.floor(track.duree / 60), track.duree % 60) or "N/A"
+        local line = string.format(
+            "%d. %s - %s [%s] (%s, %d kbps)",
+            i,
+            track.titre or "Inconnu",
+            track.artiste or "Inconnu",
+            track.album or "Inconnu",
+            duration,
+            track.bitrate or 0
+        )
+        table.insert(lines, line)
     end
     
-    if #tracks > 5 then
-        table.insert(response, "... et " .. (#tracks - 5) .. " autres résultats")
-    end
+    local more = #tracks > limit and (" | +" .. (#tracks - limit) .. " autres") or ""
     
-    return response
+    return table.concat(lines, " | ") .. more
 end
 
-function music_manager.show_track_info(nick, channel, args)
-    local track_id = tonumber(args:match("^%s*(%d+)") or args)
-    if not track_id then
-        return {"❌ Utilisation: !music info <id>"}
+-- =====================================================================
+-- Gestion des fichiers
+-- =====================================================================
+
+function M.scan_directory(directory)
+    -- Simple scan pour trouver les fichiers audio
+    -- Retourne une liste de fichiers
+    local files = {}
+    
+    -- Vérifier que le dossier existe
+    local handle = io.popen('find "' .. directory .. '" -type f 2>/dev/null')
+    if handle then
+        for file in handle:lines() do
+            -- Filtrer par extensions autorisées
+            local allowed = config.music.allowed_extensions or {"mp3", "flac", "ogg", "m4a", "wav"}
+            local ext = file:match("%.([^%.]+)$")
+            if ext then
+                ext = ext:lower()
+                for _, allowed_ext in ipairs(allowed) do
+                    if ext == allowed_ext:lower() then
+                        table.insert(files, file)
+                        break
+                    end
+                end
+            end
+        end
+        handle:close()
     end
     
-    local track = music_manager.db.get_track_by_id(track_id)
-    if not track then
-        return {"❌ Piste non trouvée (ID: " .. track_id .. ")"}
-    end
-    
-    local response = {
-        "📀 ID: " .. track.id,
-        "🎵 Titre: " .. track.titre,
-        "🎤 Artiste: " .. track.artiste,
-        "💿 Album: " .. track.album,
-        "📅 Année: " .. (track.annee or "???"),
-        "🎭 Genre: " .. track.genre,
-        "⏱️ Durée: " .. music_manager.format_duration(track.duree),
-        "🔊 Bitrate: " .. (track.bitrate or 0) .. " kbps",
-        "📁 Fichier: " .. track.chemin_fichier,
-        "👤 Ajouté par: " .. track.ajoute_par,
-        "📅 Date: " .. track.date_ajout,
-        "🎧 Lectures: " .. track.nb_lectures,
-        "🔗 Hash: " .. track.hash_fichier,
-        "🔗 Streaming: " .. music_manager.config.base_url .. "/stream/" .. track.hash_fichier
-    }
-    
-    return response
+    return files
 end
 
-function music_manager.show_stats(nick, channel)
-    local stats = music_manager.db.get_stats()
+function M.add_directory(directory, added_by)
+    if not db then return 0, "Base de données non connectée" end
     
-    if not stats then
-        return {"❌ Impossible de récupérer les statistiques"}
-    end
+    local files = M.scan_directory(directory)
+    local count = 0
     
-    local response = {
-        "📊 Statistiques de la bibliothèque:",
-        "📁 Total pistes: " .. (stats.total_tracks or 0),
-        "🎧 Total lectures: " .. (stats.total_plays or 0)
-    }
-    
-    if stats.top_tracks and #stats.top_tracks > 0 then
-        table.insert(response, "🏆 Top " .. (#stats.top_tracks > 10 and "10" or #stats.top_tracks) .. ":")
-        for i = 1, math.min(#stats.top_tracks, 10) do
-            local track = stats.top_tracks[i]
-            table.insert(response, string.format("%d. %s - %s (%d lectures)",
-                i, track.titre, track.artiste, track.nb_lectures or 0))
+    for _, filepath in ipairs(files) do
+        local track_id, err = M.add_track(filepath, added_by)
+        if track_id then
+            count = count + 1
+        else
+            print(string.format("⚠️  Impossible d'ajouter %s: %s", filepath, err or "erreur inconnue"))
         end
     end
     
-    return response
-end
-
-function music_manager.generate_download_link(nick, channel, args)
-    local track_id = tonumber(args:match("^%s*(%d+)") or args)
-    if not track_id then
-        return {"❌ Utilisation: !music dl <id>"}
-    end
-    
-    local track = music_manager.db.get_track_by_id(track_id)
-    if not track then
-        return {"❌ Piste non trouvée (ID: " .. track_id .. ")"}
-    end
-    
-    local filename = string.gsub(track.titre or "track", "[^%w%-%._]", "_") .. ".mp3"
-    local url = music_manager.config.base_url .. "/dl/" .. track.hash_fichier .. "?file=" .. filename
-    
-    return {"📥 Télécharger: " .. url}
-end
-
-function music_manager.play_track(nick, channel, args)
-    local track_id = tonumber(args:match("^%s*(%d+)") or args)
-    if not track_id then
-        return {"❌ Utilisation: !music play <id>"}
-    end
-    
-    local track = music_manager.db.get_track_by_id(track_id)
-    if not track then
-        return {"❌ Piste non trouvée (ID: " .. track_id .. ")"}
-    end
-    
-    -- Incrémenter le compteur de lectures
-    music_manager.db.increment_play_count(track_id)
-    
-    local stream_url = music_manager.config.base_url .. "/stream/" .. track.hash_fichier
-    
-    return {
-        "🎵 Lecture: " .. track.titre .. " - " .. track.artiste .. " (" .. 
-            music_manager.format_duration(track.duree) .. ") | " .. stream_url
-    }
+    return count, nil
 end
 
 -- =====================================================================
--- Fonctions utilitaires
+-- Fermeture
 -- =====================================================================
 
-function music_manager.format_duration(seconds)
-    if not seconds or seconds == 0 then return "0:00" end
-    
-    local minutes = math.floor(seconds / 60)
-    local secs = math.floor(seconds % 60)
-    return string.format("%d:%02d", minutes, secs)
-end
+-- =====================================================================
+-- Gestionnaire de commandes IRC
+-- =====================================================================
 
-function music_manager.calculate_file_hash(file_path)
-    local lfs = pcall(require, "lfs")
-    if not lfs then return nil end
+function M.handle_command(nick, target, message)
+    local cmd = message:lower()
+    local responses = {}
     
-    local lfs_module = require("lfs")
-    local file = io.open(file_path, "rb")
-    if not file then return nil end
-    
-    -- Lire le fichier par blocs
-    local sha256 = require("sha256")  -- Si disponible
-    if not sha256 then
-        -- Implémentation simple de hash si sha256 n'est pas disponible
-        local crypto = require("crypto")  -- LuaSec
-        if crypto then
-            local hash = crypto.digest("sha256", "")
-            -- Lire le fichier
-            local content = file:read("*a")
-            file:close()
-            if content then
-                hash = crypto.digest("sha256", content)
-                return hash:lower()
+    -- !music add <chemin|URL>
+    if cmd:match("^!music add") then
+        local filepath = cmd:match("^!music add (.+)")
+        if filepath then
+            -- Vérifier si c'est une URL ou un chemin local
+            if filepath:match("^https?://") then
+                table.insert(responses, nick .. ": ❌ L'ajout par URL n'est pas encore implémenté. Utilisez un chemin local.")
+            else
+                -- Ajouter le track
+                local track_id, err = M.add_track(filepath, nick)
+                if track_id then
+                    local track = M.get_track_by_id(track_id)
+                    if track then
+                        table.insert(responses, nick .. ": ✅ Piste ajoutée: " .. M.format_track_info(track))
+                    else
+                        table.insert(responses, nick .. ": ✅ Piste ajoutée (ID: " .. track_id .. ")")
+                    end
+                else
+                    table.insert(responses, nick .. ": ❌ Erreur: " .. (err or "Inconnu"))
+                end
             end
         else
-            -- Hash simple basé sur la taille et le nom
-            local attrs = lfs_module.attributes(file_path)
-            if attrs then
-                return music_manager.simple_hash(file_path .. attrs.size)
-            end
+            table.insert(responses, nick .. ": ❌ Utilisation: !music add <chemin>")
         end
+        
+    -- !music search <requête>
+    elseif cmd:match("^!music search") then
+        local query = cmd:match("^!music search (.+)")
+        if query then
+            local tracks, err = M.search_tracks(query, 5)
+            if tracks and #tracks > 0 then
+                table.insert(responses, "🔍 **Résultats**: " .. M.format_track_list(tracks, 5))
+            else
+                table.insert(responses, nick .. ": ❌ Aucune piste trouvée pour " .. query)
+            end
+        else
+            table.insert(responses, nick .. ": ❌ Utilisation: !music search <requête>")
+        end
+        
+    -- !music info <id>
+    elseif cmd:match("^!music info") then
+        local query = cmd:match("^!music info (%S+)")
+        if query then
+            local track_id = tonumber(query)
+            local track
+            if track_id then
+                track = M.get_track_by_id(track_id)
+            else
+                -- Essayer de trouver par nom
+                local tracks = M.search_tracks(query, 1)
+                track = tracks and tracks[1]
+            end
+            
+            if track then
+                table.insert(responses, "ℹ️ **Info Piste**: " .. M.format_track_info(track))
+            else
+                table.insert(responses, nick .. ": ❌ Piste non trouvée: " .. query)
+            end
+        else
+            table.insert(responses, nick .. ": ❌ Utilisation: !music info <ID|nom>")
+        end
+        
+    -- !music play <id>
+    elseif cmd:match("^!music play") then
+        local query = cmd:match("^!music play (%S+)")
+        if query then
+            local track_id = tonumber(query)
+            local track
+            if track_id then
+                track = M.get_track_by_id(track_id)
+            else
+                local tracks = M.search_tracks(query, 1)
+                track = tracks and tracks[1]
+            end
+            
+            if track then
+                -- Incrémenter le compteur
+                M.increment_play_count(track.id)
+                
+                -- Formater la réponse
+                local info = string.format(
+                    "▶️ **Joue**: %s - %s [%s] (%d kbps)",
+                    track.titre or "Inconnu",
+                    track.artiste or "Inconnu",
+                    track.album or "Inconnu",
+                    track.bitrate or 0
+                )
+                
+                if track.url_streaming and track.url_streaming ~= "" then
+                    info = info .. " | " .. track.url_streaming
+                end
+                
+                table.insert(responses, info)
+            else
+                table.insert(responses, nick .. ": ❌ Piste non trouvée: " .. query)
+            end
+        else
+            table.insert(responses, nick .. ": ❌ Utilisation: !music play <ID|nom>")
+        end
+        
+    -- !music stats
+    elseif cmd:match("^!music stats") then
+        local tracks, err = M.get_most_played(10)
+        if tracks and #tracks > 0 then
+            table.insert(responses, "🏆 **Top 10 des pistes les plus écoutées**:")
+            for i, track in ipairs(tracks) do
+                local duration = track.duree and string.format("%02d:%02d", math.floor(track.duree / 60), track.duree % 60) or "N/A"
+                local line = string.format("%d. %s - %s (%d lectures)", i, track.titre or "Inconnu", track.artiste or "Inconnu", track.nb_lectures or 0)
+                table.insert(responses, line)
+            end
+        else
+            table.insert(responses, nick .. ": ❌ Aucune statistique disponible")
+        end
+        
+    -- !music recent
+    elseif cmd:match("^!music recent") then
+        local limit = tonumber(cmd:match("^!music recent (%d+)")) or 5
+        local tracks, err = M.get_recently_added(limit)
+        if tracks and #tracks > 0 then
+            table.insert(responses, "🆕 **Pistes récentes**: " .. M.format_track_list(tracks, limit))
+        else
+            table.insert(responses, nick .. ": ❌ Aucune piste récente")
+        end
+        
+    -- !music dl <id>
+    elseif cmd:match("^!music dl") then
+        local query = cmd:match("^!music dl (%S+)")
+        if query then
+            local track_id = tonumber(query)
+            local track
+            if track_id then
+                track = M.get_track_by_id(track_id)
+            else
+                local tracks = M.search_tracks(query, 1)
+                track = tracks and tracks[1]
+            end
+            
+            if track and track.url_streaming and track.url_streaming ~= "" then
+                table.insert(responses, nick .. ": 📥 Lien de téléchargement: " .. track.url_streaming)
+            else
+                table.insert(responses, nick .. ": ❌ Piste non trouvée ou pas de lien de téléchargement")
+            end
+        else
+            table.insert(responses, nick .. ": ❌ Utilisation: !music dl <ID|nom>")
+        end
+        
+    -- !music
+    elseif cmd:match("^!music$") then
+        table.insert(responses, "❓ **Aide Musique**: !music add <chemin> | !music search <terme> | !music info <ID> | !music play <ID> | !music stats | !music recent | !music dl <ID>")
+        
+    -- Commande inconnue
+    else
+        table.insert(responses, nick .. ": ❌ Commande musique inconnue. Tapez !music pour l'aide.")
     end
     
-    file:close()
-    return nil
+    return responses
 end
 
-function music_manager.simple_hash(text)
-    -- Génère un hash simple (pas cryptographique)
-    local hash = 0
-    for i = 1, #text do
-        hash = (hash * 31 + string.byte(text, i)) % 16777216
+function M.shutdown()
+    if db then
+        db:close()
+        db = nil
     end
-    return string.format("%08x", hash)
-end
-
-function music_manager.get_relative_path(file_path)
-    local music_dir = music_manager.config.music_dir
-    -- Remplacer le chemin absolu par un chemin relatif
-    if file_path:sub(1, 1) == "/" then
-        return file_path
+    
+    if creamroad_manager then
+        creamroad_manager.shutdown()
+        creamroad_manager = nil
     end
-    return file_path
 end
 
-function music_manager.get_stream_url(track)
-    if track.url_streaming and track.url_streaming ~= "" then
-        return track.url_streaming
-    end
-    return music_manager.config.base_url .. "/stream/" .. track.hash_fichier
-end
-
--- =====================================================================
--- Export
--- =====================================================================
-
-return music_manager
+return M

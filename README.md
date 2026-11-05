@@ -5,7 +5,10 @@ Un bot IRC écrit en Lua avec les fonctionnalités suivantes :
 - 🧹 **Nettoyage des URLs** : Supprime tous les paramètres de tracking (YouTube et autres)
 - 🍽️ **Menu interactif** : Affiche un menu de boissons et nourriture
 - 🎵 **Module Musique** : Gestion complète de bibliothèque musicale avec PostgreSQL
+- 📁 **Module CreamRoad** : Intégration avec la bibliothèque CreamRoad pour recherche et streaming
 - ⏰ **Date horaire** : Exécute `/exec -o date` à chaque heure ronde
+- 🌐 **GéoIP** : Affiche l'IP et la localisation des URLs nettoyées
+- 📊 **Logging** : Journalisation complète des conversations et événements
 
 ## Prérequis
 
@@ -93,6 +96,11 @@ lua irc_bot.lua
 | `!music play <id>` | Génère un lien de streaming |
 | `!date` | Affiche la date et heure |
 | `!ping` | Teste si le bot est vivant |
+| `!creamroad` | Affiche les stats CreamRoad |
+| `!creamroad search <query>` | Recherche dans CreamRoad |
+| `!creamroad play <query>` | Joue un fichier CreamRoad |
+| `!creamroad random [N]` | Fichiers aléatoires |
+| `!creamroad mostplayed [N]` | Top des fichiers joués |
 | `!help` ou `!aide` | Affiche l'aide |
 
 ### Exemples
@@ -176,6 +184,17 @@ Le bot inclut un module complet de gestion musicale :
 - Statistiques de lecture
 
 **Voir [docs/music.md](docs/music.md) pour la documentation complète du module musique.**
+
+### 5. Module CreamRoad
+
+Le bot s'intègre avec la bibliothèque CreamRoad pour :
+- Indexation automatique des fichiers audio
+- Recherche avancée par titre, artiste, album, genre
+- Streaming direct via nginx
+- Statistiques de lecture
+- Génération de liens de téléchargement
+
+**Voir [docs/CREAMROAD.md](docs/CREAMROAD.md) pour la documentation complète du module CreamRoad.**
 
 ## Personnalisation
 
@@ -266,6 +285,7 @@ Vérifiez que :
 - [Guide d'utilisation complet](docs/USAGE.md)
 - [Configuration avancée](docs/CONFIGURATION.md)
 - **[Module Musique](docs/music.md)** - Documentation complète
+- **[Module CreamRoad](docs/CREAMROAD.md)** - Intégration avec CreamRoad
 - [Dépannage](docs/TROUBLESHOOTING.md)
 - [Développement](docs/DEVELOPMENT.md)
 

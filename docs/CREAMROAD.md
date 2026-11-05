@@ -1,468 +1,268 @@
-# CreamRoad - Intégration avec IRC-BOT
+# CreamRoad Module - Documentation
 
-Ce guide explique comment intégrer le dossier **CremRoad - Sep 2026** avec le bot IRC, en stockant les fichiers dans PostgreSQL et en les rendant accessibles via nginx.
+## Overview
 
-## 📁 Structure du dossier CreamRoad
+The CreamRoad module integrates with the IRC bot to provide music file management, search, and streaming capabilities. It indexes audio files from the CreamRoad directory and provides commands to search, play, and manage music files.
 
+## Configuration
+
+### Database Setup
+
+The module requires PostgreSQL. Ensure the following tables exist (they are created automatically on first run):
+
+```sql
+-- See sql/creamroad_schema.sql for the complete schema
+CREATE TABLE creamroad_files (
+    id SERIAL PRIMARY KEY,
+    file_path VARCHAR(1024) NOT NULL UNIQUE,
+    filename VARCHAR(512) NOT NULL,
+    file_size BIGINT NOT NULL,
+    file_type VARCHAR(50),
+    -- Track metadata (ID3/FLAC/Vorbis tags)
+    title VARCHAR(512),
+    artist VARCHAR(512),
+    album VARCHAR(512),
+    genre VARCHAR(255),
+    year INTEGER,
+    track_number INTEGER,
+    duration INTEGER, -- in seconds
+    bitrate INTEGER,  -- in kbps
+    -- Playback tracking
+    play_count INTEGER DEFAULT 0,
+    last_played TIMESTAMP,
+    added_by VARCHAR(255) NOT NULL,
+    added_at TIMESTAMP DEFAULT NOW(),
+    hash VARCHAR(64) UNIQUE
+);
+
+CREATE INDEX idx_creamroad_title ON creamroad_files(title);
+CREATE INDEX idx_creamroad_artist ON creamroad_files(artist);
+CREATE INDEX idx_creamroad_album ON creamroad_files(album);
+CREATE INDEX idx_creamroad_play_count ON creamroad_files(play_count);
+CREATE INDEX idx_creamroad_added_at ON creamroad_files(added_at);
 ```
-CremRoad - Sep 2026/
-├── audio/           # Fichiers audio (FLAC, MP3, etc.)
-├── covers/          # Pochettes d'album
-├── video/           # Fichiers vidéo
-├── metadata/        # Métadonnées (JSON, etc.)
-│   ├── covers.txt   # Liste des pochettes
-│   └── json-clewn-audio.php.json  # Métadonnées des fichiers audio
-├── songbook/        # Livret des chansons
-├── index.html       # Page d'accueil
-└── README.txt       # Documentation
+
+### Bot Configuration
+
+Add to your `config_custom.lua`:
+
+```lua
+creamroad = {
+    enabled = true,                    -- Enable/disable CreamRoad module
+    root_path = "/path/to/CreamRoad",  -- Path to CreamRoad directory
+    scan_depth = 3,                     -- Subdirectory scan depth
+    auto_index = true,                  -- Auto-index new files
+    db_table = "creamroad_files",       -- PostgreSQL table name
+    nginx = {
+        server_name = "localhost",
+        port = 80,
+        root = "/path/to/CreamRoad",
+    }
+}
 ```
 
-## 🚀 Installation rapide
+### Nginx Configuration
 
-### 1. Prérequis
+Deploy the nginx configuration from `deploy/nginx_creamroad.conf`:
 
 ```bash
-# Installer les dépendances
-sudo apt update
-sudo apt install postgresql postgresql-contrib ffmpeg nginx luarocks
-
-# Installer les modules Lua
-luarocks install luasql-postgres
-luarocks install lua-json
-```
-
-### 2. Configurer PostgreSQL
-
-```bash
-# Créer l'utilisateur et la base de données (si ce n'est pas déjà fait)
-sudo -u postgres psql -c "CREATE USER irc_user WITH PASSWORD 'irc_password';"
-sudo -u postgres psql -c "CREATE DATABASE irc_bot;"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE irc_bot TO irc_user;"
-
-# Importer le schéma CreamRoad
-sudo -u postgres psql -d irc_bot -f sql/creamroad_schema.sql
-
-# Accorder les permissions
-sudo -u postgres psql -d irc_bot -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO irc_user;"
-sudo -u postgres psql -d irc_bot -c "GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO irc_user;"
-```
-
-### 3. Configurer nginx
-
-#### Option 1: Site dédié (recommandé)
-
-```bash
-# Copier la configuration
 sudo cp deploy/nginx_creamroad.conf /etc/nginx/sites-available/creamroad
-
-# Créer le lien symbolique
 sudo ln -s /etc/nginx/sites-available/creamroad /etc/nginx/sites-enabled/
-
-# Tester et redémarrer nginx
-sudo nginx -t
-sudo systemctl restart nginx
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-#### Option 2: Intégration avec le site existant
+This enables:
+- Direct file access at `http://your-server/creamroad/`
+- Streaming support for audio files
+- CORS headers for web-based players
 
-Ajoutez cette configuration à votre fichier nginx existant :
+## Usage
 
-```nginx
-location /creamroad/ {
-    alias /home/claire/IRC-BOT/CremRoad - Sep 2026/;
-    
-    location /creamroad/audio/ {
-        add_header Accept-Ranges bytes;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header 'Access-Control-Allow-Origin' '*';
-    }
-    
-    location /creamroad/covers/ {
-        expires 30d;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header 'Access-Control-Allow-Origin' '*';
-    }
-    
-    location /creamroad/video/ {
-        add_header Accept-Ranges bytes;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header 'Access-Control-Allow-Origin' '*';
-    }
+### IRC Commands
+
+#### Administration
+- `!creamroad` - Display CreamRoad module status and statistics
+- `!creamroad stats` - Show detailed statistics (total files, play counts, etc.)
+
+#### Search and Discovery
+- `!creamroad search <query>` - Search for files by title, artist, album, or filename
+- `!creamroad search artist:<name>` - Search by artist
+- `!creamroad search album:<name>` - Search by album
+- `!creamroad search genre:<name>` - Search by genre
+- `!creamroad search year:<year>` - Search by year
+
+#### Playback
+- `!creamroad play <query>` - Play a file matching the query
+- `!creamroad play <ID>` - Play a specific file by ID
+- `!creamroad random [N]` - Play N random files (default: 1)
+- `!creamroad recent [N]` - Show N most recently added files (default: 5)
+
+#### Statistics
+- `!creamroad mostplayed [N]` - Show N most played files (default: 10)
+- `!creamroad leastplayed [N]` - Show N least played files (default: 10)
+- `!creamroad longest [N]` - Show N longest tracks (default: 10)
+- `!creamroad byartist <artist> [N]` - Show N tracks by a specific artist (default: 10)
+
+### Examples
+
+```irc
+<user> !creamroad search sabaton
+<bot> 🎵 Résultats CreamRoad pour "sabaton" (3 résultats) :
+       1. [ID:42] Sabaton - The Last Stand (Album: The Last Stand, 3:54) [Played: 15x]
+       2. [ID:123] Sabaton - Ghost Division (Album: The Art of War, 3:50) [Played: 8x]
+       3. [ID:456] Sabaton - Prussian Blue (Album: The Last Stand, 4:28) [Played: 12x]
+       Utilisez !creamroad play <ID> pour jouer
+
+<user> !creamroad play 42
+<bot> 🎵 [JOUER] Sabaton - The Last Stand (3:54) [Requête #12345]
+       URL: https://your-server/creamroad/sabaton/the_last_stand.mp3
+       IP: 192.168.1.100
+
+<user> !creamroad random 3
+<bot> 🎵 [RANDOM] 3 fichiers aléatoires :
+       1. [ID:789] Metallica - Enter Sandman (5:32)
+       2. [ID:101] Iron Maiden - Fear of the Dark (7:28)
+       3. [ID:202] Judas Priest - Painkiller (6:06)
+       Utilisez !creamroad play <ID> pour jouer
+
+<user> !creamroad mostplayed 5
+<bot> 🏆 Top 5 CreamRoad :
+       1. [ID:42] Sabaton - The Last Stand (15x)
+       2. [ID:456] Sabaton - Prussian Blue (12x)
+       3. [ID:888] Rammstein - Du Hast (10x)
+       4. [ID:123] Sabaton - Ghost Division (8x)
+       5. [ID:999] Nightwish - Ghost Love Score (8x)
+```
+
+## File Indexing
+
+The module automatically indexes audio files on startup if `auto_index` is enabled. It scans:
+
+- MP3 files (with ID3v1/v2 tag support)
+- FLAC files (with Vorbis comment support)
+- OGG files (with Vorbis comment support)
+- M4A files (with iTunes metadata support)
+- WAV files (basic metadata)
+
+### Supported Metadata
+
+- Title
+- Artist
+- Album
+- Genre
+- Year
+- Track number
+- Duration
+- Bitrate
+- Album art (URL only, not embedded)
+
+### File Naming Conventions
+
+For best results, use consistent file naming:
+```
+Artist - Title.mp3
+Artist/Album/Track Number - Title.mp3
+```
+
+## Music Module Integration
+
+The CreamRoad module works alongside the music module:
+
+- **Music Module**: Manages a curated library with playlists and advanced features
+- **CreamRoad Module**: Provides search and playback for existing CreamRoad files
+
+Both modules can be used simultaneously.
+
+## Web Player
+
+A simple web player is available at `http://your-server/creamroad/player/` (if nginx is configured with the provided configuration).
+
+### Features
+
+- Browse all indexed files
+- Search and filter
+- Play files directly in the browser
+- View metadata
+- Track playback statistics
+
+## API (Internal)
+
+The module provides the following internal functions for integration:
+
+```lua
+-- Initialize the module
+creamroad_manager.init(config)
+
+-- Index a file
+creamroad_manager.index_file(file_path)
+
+-- Index all files in the directory
+creamroad_manager.index_directory()
+
+-- Search files
+creamroad_manager.search(query, limit, offset)
+
+-- Get file info
+creamroad_manager.get_file_info(file_id)
+
+-- Increment play count
+creamroad_manager.increment_play_count(file_id)
+
+-- Get statistics
+creamroad_manager.get_stats()
+```
+
+## Performance Considerations
+
+- Indexing large libraries may take several minutes on first run
+- Set `scan_depth` appropriately for your directory structure
+- Use `auto_index = false` and manually trigger indexing if you have a very large library
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Connection Failed**: Verify PostgreSQL is running and credentials are correct
+2. **No Files Found**: Check `root_path` and ensure files have supported extensions
+3. **Metadata Missing**: Some files may not have complete ID3 tags
+4. **Nginx Errors**: Verify nginx configuration and restart nginx
+
+### Debug Mode
+
+Enable debug logging in `config_custom.lua`:
+
+```lua
+logging = {
+    enabled = true,
+    filename = "irc_bot.log",
+    level = "debug",
+    max_size = 10 * 1024 * 1024,
+    max_files = 5
 }
 ```
 
-Puis :
-```bash
-sudo nginx -t
-sudo systemctl restart nginx
-```
+### Log Files
 
-### 4. Importer les fichiers dans PostgreSQL
+Check the following log files:
+- `irc_bot.log` - Bot and module logs
+- `/var/log/nginx/error.log` - Nginx errors
+- PostgreSQL logs (typically `/var/log/postgresql/postgresql-*.log`)
 
-```bash
-# Utiliser la cible Make
-make import-creamroad
+## Security
 
-# Ou exécuter le script manuellement
-lua scripts/import_creamroad.lua
-```
+- The CreamRoad directory should not be world-writable
+- Nginx should run as a dedicated user
+- Database credentials should use limited privileges
+- Consider setting up HTTPS for nginx
 
-### 5. Créer un lien symbolique pour nginx (si nécessaire)
+## Dependencies
 
-```bash
-# Si nginx utilise /var/www/html
-sudo mkdir -p /var/www/html/creamroad
-sudo ln -sf /home/claire/IRC-BOT/CremRoad - Sep 2026 /var/www/html/creamroad
-```
+- Lua 5.1+
+- LuaSocket
+- LuaSQL-PostgreSQL
+- PostgreSQL 9.5+
+- Nginx (optional, for web access)
 
-## 📊 Structure de la base de données
+## License
 
-### Table principale: `creamroad_files`
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `id` | SERIAL | Identifiant unique |
-| `filename` | VARCHAR(512) | Nom du fichier |
-| `artist` | VARCHAR(255) | Artiste |
-| `album` | VARCHAR(255) | Album |
-| `title` | VARCHAR(255) | Titre de la piste |
-| `comment` | TEXT | Commentaires |
-| `year` | INTEGER | Année de sortie |
-| `track` | INTEGER | Numéro de piste |
-| `file_type` | VARCHAR(50) | Type: audio, video, cover, other |
-| `file_path` | VARCHAR(512) | Chemin relatif dans CreamRoad |
-| `file_size` | BIGINT | Taille en octets |
-| `hash` | CHAR(64) | Hash SHA-256 du fichier |
-| `duration` | INTEGER | Durée en secondes (audio/vidéo) |
-| `resolution` | VARCHAR(50) | Résolution (vidéo) |
-| `format` | VARCHAR(50) | Format du fichier (mp3, flac, etc.) |
-| `license` | VARCHAR(255) | License (CC-BY-NC-SA, etc.) |
-| `added_at` | TIMESTAMP | Date d'ajout |
-| `updated_at` | TIMESTAMP | Date de mise à jour |
-
-### Table des statistiques: `creamroad_stats`
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `id` | SERIAL | Identifiant unique |
-| `stat_name` | VARCHAR(100) | Nom de la statistique |
-| `stat_value` | TEXT | Valeur de la statistique |
-| `updated_at` | TIMESTAMP | Date de mise à jour |
-
-Statistiques disponibles :
-- `total_files`: Nombre total de fichiers
-- `total_audio`: Nombre de fichiers audio
-- `total_video`: Nombre de fichiers vidéo
-- `total_covers`: Nombre de covers
-- `last_updated`: Date de dernière mise à jour
-
-### Table des tags: `creamroad_tags`
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `id` | SERIAL | Identifiant unique |
-| `file_id` | INTEGER | Référence à creamroad_files |
-| `tag` | VARCHAR(100) | Tag ou catégorie |
-
-### Tables des playlists
-
-- `creamroad_playlists`: Liste des playlists
-- `creamroad_playlist_items`: Éléments des playlists avec position
-
-## 🎯 Utilisation du script d'import
-
-### Script: `scripts/import_creamroad.lua`
-
-Le script effectue les opérations suivantes :
-
-1. **Charge les métadonnées** depuis `metadata/json-clewn-audio.php.json`
-2. **Scanne les répertoires** `audio/`, `video/`, `covers/`
-3. **Extrait les informations** pour chaque fichier :
-   - Nom du fichier
-   - Type (audio, video, cover)
-   - Taille du fichier
-   - Hash SHA-256
-   - Métadonnées (artiste, album, titre, etc.)
-   - License
-4. **Insère dans PostgreSQL** avec gestion des conflits (mise à jour si le fichier existe déjà)
-5. **Met à jour les statistiques** globales
-
-### Personnalisation du script
-
-Éditez `scripts/import_creamroad.lua` pour modifier :
-
-```lua
-local config = {
-    creamroad_dir = "CremRoad - Sep 2026",
-    metadata_dir = "metadata",
-    audio_dir = "audio",
-    covers_dir = "covers",
-    video_dir = "video",
-    base_url = "/creamroad",
-    
-    postgres = {
-        host = "localhost",
-        port = 5432,
-        database = "irc_bot",
-        user = "irc_user",
-        password = "irc_password"
-    }
-}
-```
-
-### Exécution du script
-
-```bash
-# Exécution normale
-lua scripts/import_creamroad.lua
-
-# Avec logging détaillé
-LUA_DEBUG=1 lua scripts/import_creamroad.lua
-
-# Vérifier la connexion PostgreSQL d'abord
-psql -U irc_user -d irc_bot -c "SELECT count(*) FROM creamroad_files;"
-```
-
-## 🎵 Commandes IRC pour CreamRoad
-
-Vous pouvez étendre le bot IRC pour ajouter des commandes spécifiques à CreamRoad. Voici un exemple :
-
-### Commandes possibles à ajouter dans `irc_bot.lua`
-
-```lua
--- Rechercher dans CreamRoad
-if message:match("^!creamroad search") then
-    local query = message:match("^!creamroad search (.+)")
-    -- Requête PostgreSQL pour rechercher
-    local result = db_conn:execute(string.format(
-        "SELECT id, artist, album, title FROM creamroad_files WHERE artist ILIKE '%%%s%%' OR album ILIKE '%%%s%%' OR title ILIKE '%%%s%%' LIMIT 10",
-        query, query, query
-    ))
-    -- Formater et envoyer les résultats
-end
-
--- Obtenir des statistiques
-if message:match("^!creamroad stats") then
-    local result = db_conn:execute("SELECT stat_name, stat_value FROM creamroad_stats")
-    local stats = {}
-    local row = result:fetch({}, "a")
-    while row do
-        stats[row.stat_name] = row.stat_value
-        row = result:fetch(row, "a")
-    end
-    send_irc_message(target, string.format("📊 CreamRoad Stats: %s fichiers audio, %s fichiers video, %s covers",
-        stats.total_audio or 0, stats.total_video or 0, stats.total_covers or 0))
-end
-
--- Jouer un fichier (génère un lien de streaming)
-if message:match("^!creamroad play") then
-    local id = message:match("^!creamroad play (%d+)")
-    local result = db_conn:execute(string.format(
-        "SELECT file_path, artist, title FROM creamroad_files WHERE id = %d", id
-    ))
-    local row = result:fetch({}, "a")
-    if row then
-        send_irc_message(target, string.format("🎵 Lecture: %s - %s | http://votre-domaine.com/creamroad/%s", 
-            row.artist, row.title, row.file_path))
-    end
-end
-```
-
-## 🔍 Requêtes PostgreSQL utiles
-
-### Compter les fichiers par type
-```sql
-SELECT file_type, COUNT(*) as count 
-FROM creamroad_files 
-GROUP BY file_type 
-ORDER BY count DESC;
-```
-
-### Trouver les albums les plus représentés
-```sql
-SELECT album, COUNT(*) as count 
-FROM creamroad_files 
-WHERE album IS NOT NULL 
-GROUP BY album 
-ORDER BY count DESC 
-LIMIT 10;
-```
-
-### Trouver les artistes les plus représentés
-```sql
-SELECT artist, COUNT(*) as count 
-FROM creamroad_files 
-WHERE artist IS NOT NULL 
-GROUP BY artist 
-ORDER BY count DESC 
-LIMIT 10;
-```
-
-### Rechercher par année
-```sql
-SELECT year, COUNT(*) as count 
-FROM creamroad_files 
-WHERE year > 0 
-GROUP BY year 
-ORDER BY year DESC;
-```
-
-### Obtenir les fichiers récemment ajoutés
-```sql
-SELECT id, artist, album, title, file_path 
-FROM creamroad_files 
-ORDER BY added_at DESC 
-LIMIT 20;
-```
-
-## 🎨 Accès via nginx
-
-Une fois configuré, les fichiers CreamRoad seront accessibles à :
-
-- **URL de base:** `http://votre-domaine.com/creamroad/` ou `http://localhost/creamroad/`
-- **Audio:** `http://votre-domaine.com/creamroad/audio/nom-du-fichier.flac`
-- **Covers:** `http://votre-domaine.com/creamroad/covers/nom-de-la-cover.jpg`
-- **Vidéo:** `http://votre-domaine.com/creamroad/video/nom-de-la-video.mp4`
-
-### Fonctionnalités nginx activées:
-
-✅ **Streaming audio/vidéo** avec support seeking (reprise)
-✅ **Cache optimisé** pour les fichiers statiques (30 jours)
-✅ **CORS activé** pour l'accès cross-domain
-✅ **Accept-Ranges** pour la lecture partielle
-✅ **Compression GZIP** pour les fichiers texte
-✅ **Protection** contre l'accès direct aux fichiers sensibles
-
-## 🛠️ Dépannage
-
-### Problème: nginx retourne 403 Forbidden
-
-**Solution:**
-```bash
-# Vérifier les permissions
-sudo chown -R www-data:www-data /home/claire/IRC-BOT/CremRoad - Sep 2026
-sudo chmod -R 755 /home/claire/IRC-BOT/CremRoad - Sep 2026
-
-# Vérifier la configuration nginx
-sudo nginx -t
-
-# Vérifier les logs nginx
-sudo tail -n 50 /var/log/nginx/error.log
-```
-
-### Problème: PostgreSQL refuse la connexion
-
-**Solution:**
-```bash
-# Vérifier que PostgreSQL est en cours d'exécution
-sudo systemctl status postgresql
-
-# Vérifier les identifiants
-psql -U irc_user -d irc_bot -c "SELECT 1;"
-
-# Vérifier les permissions
-sudo -u postgres psql -d irc_bot -c "\dn+"
-```
-
-### Problème: Le script d'import ne trouve pas les fichiers
-
-**Solution:**
-```bash
-# Vérifier que le dossier existe
-ls -la "CremRoad - Sep 2026/"
-
-# Vérifier les sous-dossiers
-ls -la "CremRoad - Sep 2026/audio/" | head -5
-ls -la "CremRoad - Sep 2026/metadata/" | head -5
-
-# Exécuter le script avec le chemin absolu
-cd /home/claire/IRC-BOT
-CREAMROAD_DIR=/home/claire/IRC-BOT/CremRoad - Sep 2026 lua scripts/import_creamroad.lua
-```
-
-### Problème: Les métadonnées ne sont pas importées
-
-**Solution:**
-```bash
-# Vérifier que le fichier JSON existe
-ls -la "CremRoad - Sep 2026/metadata/json-clewn-audio.php.json"
-
-# Vérifier le format du JSON
-head -20 "CremRoad - Sep 2026/metadata/json-clewn-audio.php.json"
-
-# Essayer de parser manuellement
-python3 -m json.tool "CremRoad - Sep 2026/metadata/json-clewn-audio.php.json" | head -20
-```
-
-## 📈 Exemples d'utilisation
-
-### 1. Importer et accéder aux fichiers
-
-```bash
-# Importer les fichiers
-make import-creamroad
-
-# Vérifier dans PostgreSQL
-psql -U irc_user -d irc_bot -c "SELECT count(*) FROM creamroad_files;"
-
-# Accéder via nginx
-curl http://localhost/creamroad/audio/MeInTheBath-IntroducingSnakesInIreland-06-Chicken.flac
-```
-
-### 2. Créer une playlist
-
-```sql
--- Créer une playlist
-INSERT INTO creamroad_playlists (name, description) 
-VALUES ('Me In The Bath', 'Les meilleurs titres de Me In The Bath')
-RETURNING id;
-
--- Ajouter des fichiers à la playlist (remplacez ID_PLAYLIST et ID_FILE)
-INSERT INTO creamroad_playlist_items (playlist_id, file_id, position) 
-VALUES (ID_PLAYLIST, ID_FILE, 1);
-```
-
-### 3. Ajouter des tags
-
-```sql
--- Ajouter un tag à un fichier
-INSERT INTO creamroad_tags (file_id, tag) 
-VALUES (ID_FILE, 'rock');
-
--- Rechercher par tag
-SELECT f.* FROM creamroad_files f 
-JOIN creamroad_tags t ON f.id = t.file_id 
-WHERE t.tag = 'rock' 
-LIMIT 10;
-```
-
-## 🎯 Intégration avec le bot IRC
-
-Pour une intégration complète, vous pouvez :
-
-1. **Ajouter des commandes CreamRoad** dans `irc_bot.lua` (voir exemples ci-dessus)
-2. **Créer un module dédié** `creamroad_manager.lua` sur le modèle de `music_manager.lua`
-3. **Ajouter des commandes de recherche et de lecture**
-4. **Générer des liens de streaming** pour les fichiers audio
-
-## 📚 Fichiers créés/modifiés
-
-- `sql/creamroad_schema.sql` - Schéma PostgreSQL pour CreamRoad
-- `scripts/import_creamroad.lua` - Script d'import des fichiers
-- `deploy/nginx_creamroad.conf` - Configuration nginx pour CreamRoad
-- `Makefile` - Nouvelles cibles pour CreamRoad
-- `docs/CREAMROAD.md` - Ce guide
-
-## 🔗 Liens utiles
-
-- [Documentation PostgreSQL](https://www.postgresql.org/docs/)
-- [Documentation nginx](https://nginx.org/en/docs/)
-- [LuaSQL PostgreSQL](https://github.com/leafo/luasql)
-
-## 📝 License
-
-Ce projet fait partie d'IRC-BOT et est sous licence GPL-3.0.
-
----
-
-**Fin de la documentation CreamRoad**
+This module is part of the IRC-BOT project and inherits its license (GPL-3.0).

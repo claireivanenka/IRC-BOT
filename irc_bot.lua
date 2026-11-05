@@ -105,10 +105,30 @@ pcall(function()
     music_manager = require("music_manager")
     if music_manager then
         music_enabled = music_manager.init(config)
-        if music_enabled then
-            print("✓ Module musique activé")
-        else
+        if not music_enabled then
             print("⚠️  Module musique désactivé (voir config)")
+        end
+    end
+end)
+
+-- =====================================================================
+-- CHARGEMENT DU MODULE CREAMROAD
+-- =====================================================================
+local creamroad_manager = nil
+local creamroad_enabled = false
+
+-- Charger le module CreamRoad si disponible
+pcall(function()
+    creamroad_manager = require("creamroad_manager")
+    if creamroad_manager then
+        -- Vérifier s'il n'est pas déjà initialisé par music_manager
+        if not (creamroad_manager.is_enabled and creamroad_manager:is_enabled()) then
+            creamroad_enabled = creamroad_manager.init(config)
+            if not creamroad_enabled then
+                print("⚠️  Module CreamRoad désactivé (voir config)")
+            end
+        else
+            creamroad_enabled = true
         end
     end
 end)
@@ -1471,12 +1491,12 @@ local last_hour = nil
 
 -- Se connecter au serveur IRC
 function connect_irc()
-    print("Connexion à " .. config.server .. ":" .. config.port .. "...")
+    print("Connexion à " .. (config.server.host or config.server) .. ":" .. (config.server.port or config.port) .. "...")
     
     irc_socket = tcp()
     irc_socket:settimeout(5)  -- Timeout plus long pour la connexion initiale
     
-    local result, err = irc_socket:connect(config.server, config.port)
+    local result, err = irc_socket:connect(config.server.host or config.server, config.server.port or config.port)
     if not result then
         print("❌ Erreur de connexion: " .. err)
         log_message("ERR", "Connection", "Erreur: " .. err)
@@ -1521,7 +1541,7 @@ function connect_irc()
     
     connected = true
     print("✓ Connecté au serveur IRC")
-    log_message("SYS", "Connection", "Connecté à " .. config.server .. ":" .. config.port)
+    log_message("SYS", "Connection", "Connecté à " .. (config.server.host or config.server) .. ":" .. (config.server.port or config.port))
     return true
 end
 
@@ -1731,7 +1751,10 @@ function handle_message(msg)
             "  Menus: !menu [boire|manger] - menu | !addmenu <nom> <texte> - créer | !delmenu <nom> - supprimer | !listmenus [tri] - lister | !showmenu <nom> - afficher"
         }
         if music_enabled and music_manager then
-            table.insert(help_lines, "  Musique: !music add <fichier> - ajouter | !music search <texte> - rechercher | !music info <id> - infos | !music stats - stats | !music dl <id> - télécharger | !music play <id> - stream")
+            table.insert(help_lines, "  Musique: !music add <fichier> - ajouter | !music search <texte> - rechercher | !music info <id> - infos | !music stats - stats | !music dl <id> - télécharger | !music play <id> - stream | !music recent [N] - récentes")
+        end
+        if creamroad_enabled and creamroad_manager then
+            table.insert(help_lines, "  CreamRoad: !creamroad [search|play|random|mostplayed|recent|info] | !cr [search|play|random]")
         end
         table.insert(help_lines, "  Divers: !date - date | !ping - tester | !help - cette aide")
         
@@ -1836,6 +1859,180 @@ function handle_message(msg)
             end
         end
     end
+    
+    -- =====================================================================
+    -- COMMANDES CREAMROAD
+    -- =====================================================================
+    if creamroad_enabled and message:lower():match("^!cream") then
+        local cmd = message:lower()
+        
+        if cmd:match("^!creamroad") then
+            -- Commande !creamroad
+            local subcmd = cmd:match("^!creamroad (%S+)")
+            
+            if not subcmd then
+                -- !creamroad sans argument = stats
+                local stats, err = creamroad_manager.get_stats()
+                if stats then
+                    local lines = {
+                        "📊 **CreamRoad Stats**:",
+                        string.format("Fichiers totaux: %d", stats.total_files),
+                        string.format("Taille totale: %.2f Go", (stats.total_size or 0) / (1024*1024*1024)),
+                        string.format("Playlists: %d", stats.total_playlists or 0),
+                        string.format("Tags: %d", stats.total_tags or 0)
+                    }
+                    if stats.by_type then
+                        for file_type, count in pairs(stats.by_type) do
+                            table.insert(lines, string.format("%s: %d", file_type, count))
+                        end
+                    end
+                    for _, line in ipairs(lines) do
+                        send_irc_message(target, line)
+                    end
+                else
+                    send_irc_message(target, nick .. ": ❌ Erreur: " .. (err or "Inconnu"))
+                end
+            elseif subcmd == "search" then
+                local query = cmd:match("^!creamroad search (.+)")
+                if query then
+                    local files, err = creamroad_manager.search_files(query, 5)
+                    if files and #files > 0 then
+                        local response = "🔍 **Résultats CreamRoad**: " .. creamroad_manager.format_file_list(files, 5)
+                        send_irc_message(target, response)
+                    else
+                        send_irc_message(target, nick .. ": ❌ Aucun fichier trouvé pour " .. query)
+                    end
+                else
+                    send_irc_message(target, nick .. ": ❌ Utilisation: !creamroad search <terme>")
+                end
+            elseif subcmd == "random" then
+                local count = tonumber(cmd:match("^!creamroad random (%d+)")) or 5
+                local files, err = creamroad_manager.get_random_files(count)
+                if files and #files > 0 then
+                    local response = "🎲 **Fichiers aléatoires**: " .. creamroad_manager.format_file_list(files, count)
+                    send_irc_message(target, response)
+                else
+                    send_irc_message(target, nick .. ": ❌ Aucun fichier trouvé")
+                end
+            elseif subcmd == "mostplayed" then
+                local limit = tonumber(cmd:match("^!creamroad mostplayed (%d+)")) or 5
+                local files, err = creamroad_manager.get_most_played(limit)
+                if files and #files > 0 then
+                    local lines = {"🏆 **Top CreamRoad**:"}
+                    for i, file in ipairs(files) do
+                        local file_info = string.format("%d. %s (%d lectures)", i, file.filename or "N/A", file.play_count or 0)
+                        table.insert(lines, file_info)
+                    end
+                    for _, line in ipairs(lines) do
+                        send_irc_message(target, line)
+                    end
+                else
+                    send_irc_message(target, nick .. ": ❌ Aucun fichier trouvé")
+                end
+            elseif subcmd == "recent" then
+                local limit = tonumber(cmd:match("^!creamroad recent (%d+)")) or 5
+                local files, err = creamroad_manager.get_recently_added(limit)
+                if files and #files > 0 then
+                    local response = "🆕 **Nouveautés CreamRoad**: " .. creamroad_manager.format_file_list(files, limit)
+                    send_irc_message(target, response)
+                else
+                    send_irc_message(target, nick .. ": ❌ Aucun fichier récent")
+                end
+            elseif subcmd == "play" then
+                local query = cmd:match("^!creamroad play (.+)")
+                if query then
+                    local files, err = creamroad_manager.search_files(query, 1)
+                    if files and #files > 0 then
+                        local file = files[1]
+                        local response = "▶️ **Lecture**: " .. creamroad_manager.format_file_info(file)
+                        -- Incrémenter le compteur de lecture
+                        creamroad_manager.increment_play_count(file.id)
+                        send_irc_message(target, response)
+                    else
+                        send_irc_message(target, nick .. ": ❌ Fichier non trouvé: " .. query)
+                    end
+                else
+                    send_irc_message(target, nick .. ": ❌ Utilisation: !creamroad play <terme>")
+                end
+            elseif subcmd == "info" then
+                local query = cmd:match("^!creamroad info (.+)")
+                if query then
+                    local file, err = creamroad_manager.get_file_by_name(query)
+                    if file then
+                        local response = "ℹ️ **Info**: " .. creamroad_manager.format_file_info(file)
+                        send_irc_message(target, response)
+                    else
+                        -- Essayer par ID
+                        local file_id = tonumber(query)
+                        if file_id then
+                            file, err = creamroad_manager.get_file_by_id(file_id)
+                            if file then
+                                local response = "ℹ️ **Info**: " .. creamroad_manager.format_file_info(file)
+                                send_irc_message(target, response)
+                            else
+                                send_irc_message(target, nick .. ": ❌ Fichier non trouvé: " .. query)
+                            end
+                        else
+                            send_irc_message(target, nick .. ": ❌ Fichier non trouvé: " .. query)
+                        end
+                    end
+                else
+                    send_irc_message(target, nick .. ": ❌ Utilisation: !creamroad info <nom|ID>")
+                end
+            else
+                send_irc_message(target, nick .. ": ❌ Commande CreamRoad inconnue. Essayez: search, random, mostplayed, recent, play, info")
+            end
+        end
+    end
+    
+    -- =====================================================================
+    -- COMMANDES CREAMROAD (format court)
+    -- =====================================================================
+    -- !cr search, !cr play, !cr random, etc.
+    if creamroad_enabled and message:lower():match("^!cr ") then
+        local cmd = message:lower()
+        local subcmd = cmd:match("^!cr (%S+)")
+        
+        if subcmd == "search" then
+            local query = cmd:match("^!cr search (.+)")
+            if query then
+                local files, err = creamroad_manager.search_files(query, 3)
+                if files and #files > 0 then
+                    local response = "🔍 **CreamRoad**: " .. creamroad_manager.format_file_list(files, 3)
+                    send_irc_message(target, response)
+                else
+                    send_irc_message(target, nick .. ": ❌ Aucun résultat")
+                end
+            else
+                send_irc_message(target, nick .. ": ❌ Utilisation: !cr search <terme>")
+            end
+        elseif subcmd == "play" then
+            local query = cmd:match("^!cr play (.+)")
+            if query then
+                local files, err = creamroad_manager.search_files(query, 1)
+                if files and #files > 0 then
+                    local file = files[1]
+                    local response = "▶️ " .. file.filename .. " - " .. (file.artist or "Inconnu")
+                    creamroad_manager.increment_play_count(file.id)
+                    send_irc_message(target, response)
+                else
+                    send_irc_message(target, nick .. ": ❌ Non trouvé")
+                end
+            else
+                send_irc_message(target, nick .. ": ❌ Utilisation: !cr play <terme>")
+            end
+        elseif subcmd == "random" then
+            local file, err = creamroad_manager.get_random_files(1)
+            if file and #file > 0 then
+                local response = "🎲 " .. file[1].filename .. " - " .. (file[1].artist or "Inconnu")
+                send_irc_message(target, response)
+            else
+                send_irc_message(target, nick .. ": ❌ Aucun fichier")
+            end
+        else
+            send_irc_message(target, nick .. ": ❌ Commande inconnue. Essayez: !cr search|play|random")
+        end
+    end
 end
 
 -- Vérifier si c'est une heure ronde
@@ -1887,7 +2084,7 @@ function main()
         return
     end
     
-    log_message("SYS", "Connection", "Connecté au serveur " .. config.server .. ":" .. config.port)
+    log_message("SYS", "Connection", "Connecté au serveur " .. (config.server.host or config.server) .. ":" .. (config.server.port or config.port))
     
     -- Attendre la connexion complète (messages de bienvenue)
     print("Attente de la connexion complète...")
@@ -1937,7 +2134,7 @@ function main()
     print("\n" .. string.rep("=", 60))
     print("  ✓ Bot démarré avec succès !")
     print(string.rep("=", 60))
-    print("Serveur:   " .. config.server .. ":" .. config.port)
+    print("Serveur:   " .. (config.server.host or config.server) .. ":" .. (config.server.port or config.port))
     print("Nick:      " .. config.nick)
     print("Channel:   " .. config.channel)
     print("Logging:   " .. (config.logging.enabled and "✓ Activé (" .. config.logging.filename .. ")" or "✗ Désactivé"))
@@ -1956,6 +2153,27 @@ function main()
     print("  !delmenu <nom>   - Supprimer un menu personnalisé")
     print("  !date            - Afficher la date et l'heure")
     print("  !ping            - Tester si le bot répond")
+    if music_enabled then
+        print("  !music add <chemin>  - Ajouter une piste audio")
+        print("  !music search <terme> - Rechercher des pistes")
+        print("  !music info <ID>     - Afficher les infos d'une piste")
+        print("  !music play <ID>     - Jouer une piste (incrémente le compteur)")
+        print("  !music stats         - Afficher les stats (top 10)")
+        print("  !music recent [N]    - Afficher les pistes récentes")
+        print("  !music dl <ID>       - Obtenir le lien de téléchargement")
+    end
+    if creamroad_enabled then
+        print("  !creamroad           - Afficher les stats CreamRoad")
+        print("  !creamroad search <terme> - Rechercher dans CreamRoad")
+        print("  !creamroad play <terme> - Jouer un fichier CreamRoad")
+        print("  !creamroad random [N] - Fichiers aléatoires")
+        print("  !creamroad mostplayed [N] - Top des fichiers joués")
+        print("  !creamroad recent [N] - Fichiers récemment ajoutés")
+        print("  !creamroad info <nom|ID> - Infos sur un fichier")
+        print("  !cr search <terme>    - Recherche rapide (format court)")
+        print("  !cr play <terme>      - Lecture rapide")
+        print("  !cr random            - Fichier aléatoire")
+    end
     print("  !help            - Affiche cette aide")
     print("\nPour configurer NickServ (nécessaire sur Libera.Chat):")
     print("  1. Enregistre ton nick: /MSG NickServ REGISTER ton@email.com ton_mot_de_passe")

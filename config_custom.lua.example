@@ -74,18 +74,18 @@ return {
     
     -- Configuration de la base de données PostgreSQL
     database = {
-        enabled = false,         -- true pour activer PostgreSQL
+        enabled = true,         -- true pour activer PostgreSQL
         host = "localhost",      -- Adresse du serveur PostgreSQL
         port = 5432,             -- Port PostgreSQL
         database = "irc_bot",    -- Nom de la base de données
-        user = "irc_user",       -- Nom d'utilisateur PostgreSQL
-        password = "irc_password", -- Mot de passe PostgreSQL
+        user = "claire",         -- Nom d'utilisateur PostgreSQL
+        password = "claire",     -- Mot de passe PostgreSQL
         menus_table = "custom_menus", -- Nom de la table pour les menus
     },
     
     -- Configuration du module musique
     music = {
-        enabled = false,         -- true pour activer le module musique
+        enabled = true,         -- true pour activer le module musique
         -- Répertoire de stockage des fichiers audio
         music_dir = "/var/www/music",  -- Répertoire où les fichiers audio sont stockés
         -- URL base pour le streaming/téléchargement
@@ -101,5 +101,20 @@ return {
         -- Limites
         max_file_size = 100 * 1024 * 1024, -- 100 Mo maximum
         allowed_extensions = {"mp3", "flac", "ogg", "m4a", "wav"}, -- Extensions autorisées
+    },
+    
+    -- Configuration de CreamRoad
+    creamroad = {
+        enabled = true, -- Active/désactive le module CreamRoad
+        root_path = "/home/claire/IRC-BOT/CreamRoad", -- Chemin vers le dossier CreamRoad
+        scan_depth = 3, -- Profondeur de scan des sous-dossiers
+        auto_index = true, -- Indexer automatiquement les nouveaux fichiers
+        db_table = "creamroad_files", -- Nom de la table PostgreSQL pour CreamRoad
+        -- Configuration nginx pour CreamRoad
+        nginx = {
+            server_name = "localhost",
+            port = 80,
+            root = "/home/claire/IRC-BOT/CreamRoad",
+        }
     },
 }
