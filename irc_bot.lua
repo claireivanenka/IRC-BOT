@@ -1725,14 +1725,20 @@ function handle_message(msg)
     
     -- Commande : aide
     if message:match("!help") or message:match("!aide") then
-        local help_text = "Commandes disponibles: !clean <url> - nettoyer n'importe quelle URL | !urls [N] - lister les URLs nettoyées | !lasturls [N] - dernières URLs | !listurls [N] - afficher le contenu brut de la base PostgreSQL | !dns [N] - lister les requêtes DNS | !menu [boire|manger] - afficher le menu | " ..
-                         "!addmenu <nom> <texte> - créer un menu | !delmenu <nom> - supprimer un menu | " ..
-                         "!listmenus [date|-date|name|-name|creator|-creator] - lister les menus | !showmenu <nom> - afficher un menu | !date - afficher la date | !ping - tester le bot"
+        local help_lines = {
+            "Commandes disponibles:",
+            "  Nettoyage: !clean <url> - nettoyer une URL | !urls [N] - lister | !lasturls [N] - dernières | !listurls [N] - base PostgreSQL | !dns [N] - requêtes DNS",
+            "  Menus: !menu [boire|manger] - menu | !addmenu <nom> <texte> - créer | !delmenu <nom> - supprimer | !listmenus [tri] - lister | !showmenu <nom> - afficher"
+        }
         if music_enabled and music_manager then
-            help_text = help_text .. " | !music add <fichier> - ajouter une piste | !music search <texte> - rechercher | !music info <id> - infos piste | !music stats - statistiques | !music dl <id> - télécharger | !music play <id> - stream"
+            table.insert(help_lines, "  Musique: !music add <fichier> - ajouter | !music search <texte> - rechercher | !music info <id> - infos | !music stats - stats | !music dl <id> - télécharger | !music play <id> - stream")
         end
-        help_text = help_text .. " | !help - aide"
-        send_irc_message(target, help_text)
+        table.insert(help_lines, "  Divers: !date - date | !ping - tester | !help - cette aide")
+        
+        -- Envoyer chaque ligne séparément
+        for _, line in ipairs(help_lines) do
+            send_irc_message(target, line)
+        end
     end
     
     -- Commande : ping (vérifier que le bot est vivant)
