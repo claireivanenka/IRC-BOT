@@ -6,6 +6,19 @@ local M = {}
 local config = nil
 local db = nil
 local creamroad_manager = nil
+local log_callback = nil
+
+-- Fonction pour définir un callback de logging
+function M.set_log_callback(callback)
+    log_callback = callback
+end
+
+-- Fonction de logging interne
+local function log_message(level, message)
+    if log_callback then
+        log_callback("MUSIC", level, message)
+    end
+end
 
 -- =====================================================================
 -- Initialisation
@@ -67,6 +80,7 @@ function M.init(user_config)
     -- Créer la table des musiques si elle n'existe pas
     M.create_tables()
     
+    log_message("INFO", "Module musique activé et prêt")
     print("✓ Module musique activé")
     return true
 end

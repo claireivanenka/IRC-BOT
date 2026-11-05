@@ -6,6 +6,19 @@ local M = {}
 local config = nil
 local db = nil
 local enabled = false
+local log_callback = nil
+
+-- Fonction pour définir un callback de logging (appelé depuis irc_bot.lua)
+function M.set_log_callback(callback)
+    log_callback = callback
+end
+
+-- Fonction de logging interne
+local function log_message(level, message)
+    if log_callback then
+        log_callback("CREAMROAD", level, message)
+    end
+end
 
 -- =====================================================================
 -- Initialisation
@@ -75,6 +88,7 @@ function M.init(user_config)
     end
     
     enabled = true
+    log_message("INFO", "Module CreamRoad activé avec succès")
     print("✓ Module CreamRoad activé")
     return true
 end
@@ -275,6 +289,7 @@ function M.index_directory(base_path, added_by)
     local count = 0
     local errors = {}
     
+    log_message("INFO", string.format("Début de l'indexation du dossier: %s", base_path))
     print(string.format("📁 Indexation du dossier: %s", base_path))
     
     -- Vérifier que le dossier existe
@@ -301,12 +316,14 @@ function M.index_directory(base_path, added_by)
             print(string.format("  ✅ %s", filepath))
         else
             table.insert(errors, {file = filepath, error = result})
+            log_message("ERROR", string.format("Erreur indexation: %s - %s", filepath, result))
             print(string.format("  ❌ %s: %s", filepath, result))
         end
     end
     
     handle:close()
     
+    log_message("INFO", string.format("Indexation terminée: %d fichiers indexés, %d erreurs", count, #errors))
     print(string.format("✅ Indexation terminée: %d fichiers indexés, %d erreurs", count, #errors))
     
     return true, count
@@ -317,8 +334,12 @@ end
 -- =====================================================================
 
 function M.search_files(search_term, limit, offset)
-    if not db then return nil, "Base de données non connectée" end
+    if not db then 
+        log_message("ERROR", "Recherche CreamRoad: Base de données non connectée")
+        return nil, "Base de données non connectée" 
+    end
     
+    log_message("INFO", string.format("Recherche CreamRoad: terme='%s', limit=%d, offset=%d", search_term, limit or 0, offset or 0))
     local limit_clause = limit and limit > 0 and "LIMIT " .. limit or ""
     local offset_clause = offset and offset > 0 and "OFFSET " .. offset or ""
     
@@ -359,14 +380,19 @@ function M.get_file_by_name(filename)
 end
 
 function M.get_random_files(count)
-    if not db then return nil, "Base de données non connectée" end
+    if not db then 
+        log_message("ERROR", "get_random_files: Base de données non connectée")
+        return nil, "Base de données non connectée" 
+    end
     
+    log_message("INFO", string.format("Récupération de %d fichiers aléatoires CreamRoad", count or 10))
     local query = string.format(
         "SELECT * FROM creamroad_files ORDER BY RANDOM() LIMIT %d",
         count or 10
     )
     
     local result = db:execute(query)
+    log_message("INFO", string.format("get_random_files: %d fichiers retournés", result and #result or 0))
     return result, nil
 end
 
